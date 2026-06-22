@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>Daemon Hunter</title>
+        <link>https://github.com/beret21/DaemonHunter</link>
+        <description>Claude Code zombie sub-agent hunter for macOS</description>
+        <language>en</language>
+        <item>
+            <title>Daemon Hunter 0.1.3</title>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>0.1.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <pubDate>Sun, 22 Jun 2026 00:00:00 +0900</pubDate>
+            <enclosure
+                url="https://github.com/beret21/DaemonHunter/releases/download/v0.1.3/DaemonHunter-0.1.3.zip"
+                sparkle:version="4"
+                sparkle:shortVersionString="0.1.3"
+                length="1572864"
+                type="application/octet-stream"/>
+            <description><![CDATA[
+                <h2>v0.1.3</h2>
+                <ul>
+                    <li>Renamed app to Daemon Hunter</li>
+                    <li>claude-mem observer process detection</li>
+                    <li>Traffic-light menu bar icon with pulsing animation</li>
+                    <li>Process Name column in detail view</li>
+                    <li>White background popover for better readability</li>
+                    <li>Build number auto-increment</li>
+                </ul>
+            ]]></description>
+        </item>
+    </channel>
+</rss>
