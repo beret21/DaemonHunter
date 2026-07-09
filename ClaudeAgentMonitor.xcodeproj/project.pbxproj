@@ -406,7 +406,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beret21.DaemonHunter;
 				SDKROOT = macosx;
 				SPARKLE_ED_PUBLIC_KEY = "";
@@ -495,7 +495,8 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.1.3;
+				PRODUCT_NAME = DaemonHunter;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beret21.DaemonHunter;
 				SDKROOT = macosx;
 				SPARKLE_ED_PUBLIC_KEY = "";

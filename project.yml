@@ -1,0 +1,84 @@
+name: ClaudeAgentMonitor
+
+options:
+  bundleIdPrefix: com.beret21
+  deploymentTarget:
+    macOS: "26.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  defaultConfig: Debug
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.4"
+
+targets:
+  ClaudeAgentMonitor:
+    type: application
+    platform: macOS
+    sources:
+      - path: ClaudeAgentMonitor
+        type: group
+    info:
+      path: ClaudeAgentMonitor/Resources/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: ko
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleDisplayName: AI Agent Monitor
+        CFBundleName: AI Agent Monitor
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+        SUFeedURL: "https://raw.githubusercontent.com/beret21/ClaudeAgentMonitor/main/appcast.xml"
+        SUPublicEDKey: $(SPARKLE_ED_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
+        NSUserNotificationUsageDescription: "Claude Agent Monitor는 프로세스 상태 변화를 알려드리기 위해 알림을 사용합니다."
+    entitlements:
+      path: ClaudeAgentMonitor/Resources/ClaudeAgentMonitor.entitlements
+      properties:
+        "com.apple.security.app-sandbox": false
+        "com.apple.security.network.client": true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.beret21.ClaudeAgentMonitor
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: "DT9JQA4X82"
+        SPARKLE_ED_PUBLIC_KEY: ""      # setup.sh 실행 후 키 입력
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/ClaudeAgentMonitor/Resources/ClaudeAgentMonitor-Bridging-Header.h"
+        # Apple Silicon only
+        ARCHS: arm64
+        VALID_ARCHS: arm64
+        "EXCLUDED_ARCHS[sdk=macosx*]": x86_64
+      configs:
+        Debug:
+          DEBUG_INFORMATION_FORMAT: dwarf
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
+          SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: ""
+    dependencies:
+      - package: Sparkle
+        product: Sparkle
+    preBuildScripts:
+      - name: "Verify Sparkle Key"
+        script: |
+          if [ -z "$SPARKLE_ED_PUBLIC_KEY" ]; then
+            echo "warning: SPARKLE_ED_PUBLIC_KEY is not set. Run setup.sh to generate keys."
+          fi
