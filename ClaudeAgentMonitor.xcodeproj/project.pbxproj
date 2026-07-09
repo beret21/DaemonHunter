@@ -22,6 +22,7 @@
 		7C8D56BA5A98914D6C1B1E73 /* ClaudeAgentMonitorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DCDC3EDDC1881C5C3E8619E /* ClaudeAgentMonitorApp.swift */; };
 		7D4E58C37EDBB9AD1E7EA16E /* CleanupLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACD04133E58662AFF8095D7 /* CleanupLogView.swift */; };
 		8062E89FBA1170E5F3774BF6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B50124EEA71AA72DAB2A78BE /* AppDelegate.swift */; };
+		913CA96977F5D6B5B08A9757 /* buildnumber.txt in Resources */ = {isa = PBXBuildFile; fileRef = 6CFBE8B09FA7F16CCCF3CA56 /* buildnumber.txt */; };
 		9216C6DBB0B8BF86440206AD /* SystemMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0FAB9650259B287818ACBD /* SystemMetrics.swift */; };
 		92A151A2E88F31E00C46C6C5 /* ProcessDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D5A981DEBF4FAB82D5CAFA2 /* ProcessDetailView.swift */; };
 		965EE577F989AEDDAA1B08F8 /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1066D243291FE273B452C53 /* NotificationCoordinator.swift */; };
@@ -47,6 +48,7 @@
 		5F0FAB9650259B287818ACBD /* SystemMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemMetrics.swift; sourceTree = "<group>"; };
 		608F0B73BB6BCD984BCBF6F5 /* TrendChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrendChartView.swift; sourceTree = "<group>"; };
 		6ADD1AB7ADF2ADC338F6A7AA /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMonitor.swift; sourceTree = "<group>"; };
+		6CFBE8B09FA7F16CCCF3CA56 /* buildnumber.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = buildnumber.txt; sourceTree = "<group>"; };
 		7351D1C9A125F3ECCA7296ED /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		98652CB40C1AA67A69B4B444 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		98B86BA13FC13F792D73031F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -165,6 +167,7 @@
 		FB80F97CE2E6EFB9E994E8FD /* ClaudeAgentMonitor */ = {
 			isa = PBXGroup;
 			children = (
+				6CFBE8B09FA7F16CCCF3CA56 /* buildnumber.txt */,
 				B1BE361AA01F6AC57CA60355 /* App */,
 				F5D51DB5AA56A951FA048ACE /* Core */,
 				2D9E81F61F46A4514E7F2E49 /* Intelligence */,
@@ -186,7 +189,6 @@
 				138B2564A8696179740AF7AC /* Sources */,
 				9914F680322D215883893DD9 /* Resources */,
 				385669905F19049145232FFB /* Frameworks */,
-				A1B2C3D4E5F60001A1B2C3D4 /* Auto Increment Build Number */,
 			);
 			buildRules = (
 			);
@@ -243,6 +245,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				3C3FEB2F67116ED0927AC59C /* Assets.xcassets in Resources */,
+				913CA96977F5D6B5B08A9757 /* buildnumber.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,25 +269,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ -z \"$SPARKLE_ED_PUBLIC_KEY\" ]; then\n  echo \"warning: SPARKLE_ED_PUBLIC_KEY is not set. Run setup.sh to generate keys.\"\nfi\n";
-		};
-		A1B2C3D4E5F60001A1B2C3D4 /* Auto Increment Build Number */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Auto Increment Build Number";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "COUNTER_FILE=\"${SRCROOT}/ClaudeAgentMonitor/buildnumber.txt\"\nif [ -f \"$COUNTER_FILE\" ]; then\n  BUILD=$(cat \"$COUNTER_FILE\")\nelse\n  BUILD=0\nfi\nBUILD=$((BUILD + 1))\necho $BUILD > \"$COUNTER_FILE\"\nPLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nif [ -f \"$PLIST\" ]; then\n  /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $BUILD\" \"$PLIST\"\nfi\n";
-			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -408,8 +392,9 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beret21.DaemonHunter;
+				PRODUCT_NAME = DaemonHunter;
 				SDKROOT = macosx;
-				SPARKLE_ED_PUBLIC_KEY = "";
+				SPARKLE_ED_PUBLIC_KEY = "oPaLIKPZ4OaFnAqlkvNAOcurI0WYMR0wf1Y7X4/vQNM=";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/ClaudeAgentMonitor/Resources/ClaudeAgentMonitor-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -496,10 +481,10 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.3;
-				PRODUCT_NAME = DaemonHunter;
 				PRODUCT_BUNDLE_IDENTIFIER = com.beret21.DaemonHunter;
+				PRODUCT_NAME = DaemonHunter;
 				SDKROOT = macosx;
-				SPARKLE_ED_PUBLIC_KEY = "";
+				SPARKLE_ED_PUBLIC_KEY = "oPaLIKPZ4OaFnAqlkvNAOcurI0WYMR0wf1Y7X4/vQNM=";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/ClaudeAgentMonitor/Resources/ClaudeAgentMonitor-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
