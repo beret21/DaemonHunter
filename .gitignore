@@ -33,9 +33,27 @@ Pods/
 *.cer
 *.p12
 *.pem
+sparkle_priv*
+dsa_priv*
+eddsa_priv*
+
+# Signing & notarization secrets
+*.p8
+AuthKey_*.p8
+*.mobileprovision
+*.provisionprofile
+*.certSigningRequest
+*.keychain
+*.keychain-db
+notarization*.json
+ExportOptions.local.plist
 
 # Secrets
 .env
+.env.*
+!.env.example
+*.secret
+secrets.*
 setup.sh
 
 # OS

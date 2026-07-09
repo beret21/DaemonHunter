@@ -35,7 +35,7 @@ targets:
         LSUIElement: true
         NSHighResolutionCapable: true
         NSPrincipalClass: NSApplication
-        SUFeedURL: "https://raw.githubusercontent.com/beret21/ClaudeAgentMonitor/main/appcast.xml"
+        SUFeedURL: "https://raw.githubusercontent.com/beret21/DaemonHunter/main/appcast.xml"
         SUPublicEDKey: $(SPARKLE_ED_PUBLIC_KEY)
         SUEnableAutomaticChecks: true
         NSUserNotificationUsageDescription: "Claude Agent Monitor는 프로세스 상태 변화를 알려드리기 위해 알림을 사용합니다."
