@@ -71,6 +71,9 @@ Thumbs.db
 # Obsidian
 .obsidian/
 
+# Recoverable-delete staging (never committed)
+Trash Can/
+
 # Sparkle tools & local key material
 .sparkle/
 .sparkle_key_info.txt
