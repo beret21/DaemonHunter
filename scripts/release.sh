@@ -53,6 +53,10 @@ xcodebuild \
   -archivePath "$ARCHIVE" \
   CURRENT_PROJECT_VERSION="$BUILD_INT" \
   MARKETING_VERSION="$VERSION" \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY="Developer ID Application" \
+  DEVELOPMENT_TEAM="DT9JQA4X82" \
+  PROVISIONING_PROFILE_SPECIFIER="" \
   archive
 
 # ─── 3. export (Developer ID) ────────────────────────────────────────────────
