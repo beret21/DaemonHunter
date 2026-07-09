@@ -147,7 +147,7 @@ jobs:
         run: |
           DMG="build/ClaudeAgentMonitor-${{ steps.ver.outputs.version }}.dmg"
           SIZE=$(stat -f%z "$DMG")
-          URL="https://github.com/beret21/ClaudeAgentMonitor/releases/download/${{ steps.ver.outputs.tag }}/ClaudeAgentMonitor-${{ steps.ver.outputs.version }}.dmg"
+          URL="https://github.com/beret21/DaemonHunter/releases/download/${{ steps.ver.outputs.tag }}/ClaudeAgentMonitor-${{ steps.ver.outputs.version }}.dmg"
           python3 scripts/update_appcast.py \
             --url       "$URL" \
             --version   "${{ steps.ver.outputs.version }}" \
