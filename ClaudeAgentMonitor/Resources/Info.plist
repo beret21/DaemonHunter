@@ -34,5 +34,7 @@
 	<string>https://raw.githubusercontent.com/beret21/DaemonHunter/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_ED_PUBLIC_KEY)</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

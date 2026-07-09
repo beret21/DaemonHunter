@@ -38,6 +38,7 @@ targets:
         SUFeedURL: "https://raw.githubusercontent.com/beret21/DaemonHunter/main/appcast.xml"
         SUPublicEDKey: $(SPARKLE_ED_PUBLIC_KEY)
         SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400   # 1일(초) 주기 자동 업데이트 체크
         NSUserNotificationUsageDescription: "Daemon Hunter는 프로세스 상태 변화를 알려드리기 위해 알림을 사용합니다."
     entitlements:
       path: ClaudeAgentMonitor/Resources/ClaudeAgentMonitor.entitlements

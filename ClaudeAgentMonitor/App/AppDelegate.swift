@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Task { await NotificationCoordinator.shared.requestAuthorization() }
 
+        // Sparkle 업데이터 초기화 — SPUStandardUpdaterController를 launch 시 생성해야
+        // SUEnableAutomaticChecks + SUScheduledCheckInterval(1일) 자동 체크가 실제로 동작한다.
+        _ = UpdateManager.shared
+
         // 모니터링 컴포넌트 순서대로 시작 (Self-healing 먼저 — 나머지 컴포넌트에 영향)
         SelfHealingManager.shared.start()
         ProcessMonitor.shared.startMonitoring()
