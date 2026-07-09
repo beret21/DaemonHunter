@@ -14,7 +14,7 @@ def update(url: str, version: str, build: str, size: str, signature: str):
     pub_date = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
     new_item = f"""
         <item>
-            <title>Claude Agent Monitor {version}</title>
+            <title>Daemon Hunter {version}</title>
             <pubDate>{pub_date}</pubDate>
             <enclosure
                 url="{url}"
@@ -23,7 +23,7 @@ def update(url: str, version: str, build: str, size: str, signature: str):
                 length="{size}"
                 type="application/octet-stream"
                 sparkle:edSignature="{signature}"/>
-            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
         </item>"""
 
     # Insert after <language> tag
