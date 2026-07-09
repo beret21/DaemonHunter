@@ -27,8 +27,8 @@ targets:
         CFBundleExecutable: $(EXECUTABLE_NAME)
         CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
         CFBundleInfoDictionaryVersion: "6.0"
-        CFBundleDisplayName: AI Agent Monitor
-        CFBundleName: AI Agent Monitor
+        CFBundleDisplayName: Daemon Hunter
+        CFBundleName: Daemon Hunter
         CFBundlePackageType: APPL
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -38,7 +38,7 @@ targets:
         SUFeedURL: "https://raw.githubusercontent.com/beret21/DaemonHunter/main/appcast.xml"
         SUPublicEDKey: $(SPARKLE_ED_PUBLIC_KEY)
         SUEnableAutomaticChecks: true
-        NSUserNotificationUsageDescription: "Claude Agent Monitor는 프로세스 상태 변화를 알려드리기 위해 알림을 사용합니다."
+        NSUserNotificationUsageDescription: "Daemon Hunter는 프로세스 상태 변화를 알려드리기 위해 알림을 사용합니다."
     entitlements:
       path: ClaudeAgentMonitor/Resources/ClaudeAgentMonitor.entitlements
       properties:
@@ -46,8 +46,9 @@ targets:
         "com.apple.security.network.client": true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.beret21.ClaudeAgentMonitor
-        MARKETING_VERSION: "0.1"
+        PRODUCT_BUNDLE_IDENTIFIER: com.beret21.DaemonHunter   # 배포된 앱과 동일해야 자동 업데이트 연속성 유지
+        PRODUCT_NAME: DaemonHunter                            # 산출물: DaemonHunter.app
+        MARKETING_VERSION: "0.1.3"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "26.0"
@@ -55,7 +56,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: "DT9JQA4X82"
-        SPARKLE_ED_PUBLIC_KEY: ""      # setup.sh 실행 후 키 입력
+        SPARKLE_ED_PUBLIC_KEY: "oPaLIKPZ4OaFnAqlkvNAOcurI0WYMR0wf1Y7X4/vQNM="  # Sparkle EdDSA public key (private key in keychain)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG

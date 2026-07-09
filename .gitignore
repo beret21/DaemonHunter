@@ -70,3 +70,7 @@ Thumbs.db
 
 # Obsidian
 .obsidian/
+
+# Sparkle tools & local key material
+.sparkle/
+.sparkle_key_info.txt
