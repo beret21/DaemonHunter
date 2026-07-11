@@ -356,10 +356,21 @@ struct StatusPopoverView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // 스왑 사용률 · 메모리 압박 레벨
+            // 입증분: 측정된 압박(경합) 신호 — 심각도는 여기서 나온다. 강한 색은 이 입증분에만.
             HStack(spacing: 6) {
-                metricChip("스왑", String(format: "%.0f%%", r.swapRatio * 100), swapColor(r.swapRatio))
+                metricChip("CPU 부하", String(format: "%.1f×", r.cpuLoadRatio), cpuLoadColor(r.cpuLoadRatio))
                 metricChip("메모리 압박", memPressureText(r.memPressureLevel), memPressureColor(r.memPressureLevel))
+                if r.swapIOPagesPerSec > 0 {
+                    metricChip("스왑 IO", String(format: "%.0f p/s", r.swapIOPagesPerSec), swapIOColor(r.swapIOPagesPerSec))
+                }
+            }
+
+            // 추론분: 정직한 선형 외삽(rate 안정 시에만 non-nil). 있을 때만 부차적으로, 단정 색 없이.
+            if let t = r.memTimeToExhaustionSeconds {
+                exhaustionLine("메모리", t)
+            }
+            if let t = r.swapTimeToExhaustionSeconds {
+                exhaustionLine("스왑", t)
             }
 
             // 오버헤드 회수 리포트 (리포트 전용 — 프로세스 종료 버튼 없음)
@@ -367,16 +378,18 @@ struct StatusPopoverView: View {
                 Text("회수 대상 없음 — 시스템 정상")
                     .font(.caption2).foregroundStyle(.tertiary)
             } else if showSystemDetail {
-                GlassEffectContainer(spacing: 6) {
-                    ScrollView {
+                ScrollView {
+                    GlassEffectContainer(spacing: 6) {
                         VStack(spacing: 6) {
                             ForEach(r.candidates.prefix(6)) { c in
                                 candidateRow(c)
                             }
                         }
                     }
-                    .frame(maxHeight: 176)
+                    .padding(.vertical, 1)
                 }
+                .frame(maxHeight: 176)
+                .clipped()
             }
         }
         .padding(.horizontal, 14)
@@ -388,7 +401,7 @@ struct StatusPopoverView: View {
             HStack(spacing: 6) {
                 Text(c.name)
                     .font(.caption.weight(.medium)).lineLimit(1)
-                chronicBadge(c.isChronic)
+                consumptionBadge(c.isConsuming)
                 Spacer()
                 Text(candidateValueText(c))
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -397,24 +410,31 @@ struct StatusPopoverView: View {
                 Text(c.resource.rawValue)
                     .font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
                 Text("·").font(.system(size: 9)).foregroundStyle(.quaternary)
-                Text(SystemHealthEvaluator.humanDuration(c.durationSeconds) + " 지속")
+                Text(SystemHealthEvaluator.humanDuration(c.durationSeconds) + " 관측")
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
             }
             Text(c.suggestion)
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            // 인과는 결론이 아니라 "다음 확인 대상" — 부차적 스타일로만.
+            if let edge = c.causalPointer {
+                Text(edge)
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: 8))
     }
 
-    private func chronicBadge(_ isChronic: Bool) -> some View {
-        Text(isChronic ? "만성" : "일시")
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(isChronic ? .red : .secondary)
+    // 후보는 per-process "소비 상태"일 뿐 심각도가 아니다 → 강한 색 금지, 중립 뱃지.
+    private func consumptionBadge(_ isConsuming: Bool) -> some View {
+        Text(isConsuming ? "소비 중" : "회수 후보")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 5).padding(.vertical, 1)
-            .background((isChronic ? Color.red : Color.gray).opacity(0.16))
+            .background(Color.gray.opacity(0.16))
             .clipShape(Capsule())
     }
 
@@ -437,8 +457,27 @@ struct StatusPopoverView: View {
         }
     }
 
-    private func swapColor(_ ratio: Double) -> Color {
-        ratio >= 0.8 ? .red : ratio >= 0.5 ? .orange : .secondary
+    // 압박 색은 백엔드의 경합 임계와 동일하게(입증분에만 단정).
+    private func cpuLoadColor(_ ratio: Double) -> Color {
+        // 백엔드: cpuLoadRatio>1 경고, load>코어×2(=ratio>2) 위험.
+        ratio > 2.0 ? .red : ratio > 1.0 ? .orange : .secondary
+    }
+
+    private func swapIOColor(_ pagesPerSec: Double) -> Color {
+        // 백엔드 SystemHealthEvaluator 임계와 동일: warn 50 · crit 500 pages/s.
+        pagesPerSec >= 500 ? .red : pagesPerSec >= 50 ? .orange : .secondary
+    }
+
+    // time-to-exhaustion 표시(추론분): 있을 때만, 단정 색 없이.
+    private func exhaustionLine(_ label: String, _ seconds: Double) -> some View {
+        let t = seconds < 60 ? "\(Int(max(0, seconds)))초"
+                             : SystemHealthEvaluator.humanDuration(seconds)
+        return HStack(spacing: 4) {
+            Image(systemName: "hourglass")
+                .font(.system(size: 8)).foregroundStyle(.tertiary)
+            Text("추정: \(label) 약 \(t) 뒤 소진")
+                .font(.system(size: 9)).foregroundStyle(.tertiary)
+        }
     }
 
     private func memPressureText(_ level: Int) -> String {

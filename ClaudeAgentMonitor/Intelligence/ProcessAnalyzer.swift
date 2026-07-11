@@ -214,18 +214,33 @@ final class ProcessAnalyzer: ObservableObject {
         let sysReport = SystemHealthEvaluator.shared.report
         var systemLaneSection = ""
         if sysReport.state != .normal {
+            // 후보 = "소비 중일 뿐", 인과는 결론 아님 → "확인:" 엣지 포인터만 덧붙인다.
             let cands = sysReport.candidates.prefix(4).map { c -> String in
-                let tag = c.isChronic ? "만성" : "일시"
-                return "  • \(c.name) [\(tag) · \(c.resource.rawValue)] — \(c.suggestion)"
+                let mode = c.isConsuming ? "소비 중" : "회수 후보(parked)"
+                let edge = c.causalPointer.map { " — \($0)" } ?? ""
+                return "  • \(c.name) [\(c.resource.rawValue) · \(mode)] \(c.suggestion)\(edge)"
             }.joined(separator: "\n")
+            // 계층1 확정 사실(입증된 압박)만. 없는 예측은 안 만든다.
+            var pressureFacts = "메모리 압박 레벨 \(sysReport.memPressureLevel)(0정상/1경고/2위험)"
+                + " · CPU 부하 \(String(format: "%.1f", sysReport.cpuLoadRatio))×코어"
+                + " · 스왑 IO \(String(format: "%.0f", sysReport.swapIOPagesPerSec)) p/s"
+            if let mt = sysReport.memTimeToExhaustionSeconds {
+                pressureFacts += " · 메모리 소진 추정 ~\(SystemHealthEvaluator.humanDuration(mt))"
+            }
+            if let st = sysReport.swapTimeToExhaustionSeconds {
+                pressureFacts += " · 스왑 소진 추정 ~\(SystemHealthEvaluator.humanDuration(st))"
+            }
             systemLaneSection = """
 
-## 시스템 레인 (앱 외부 · Claude 무관) [\(sysReport.state == .critical ? "위험" : "경고")]
-- 요약: \(sysReport.summary)
-- 스왑: \(String(format: "%.0f%%", sysReport.swapRatio * 100))  |  메모리 압박 레벨: \(sysReport.memPressureLevel) (0정상/1경고/2위험)
-- 오버헤드 후보:
+## 시스템 레인 (앱 외부 · Claude 무관) [백엔드 판정: \(sysReport.state == .critical ? "위험" : "경고")]
+- 압박(입증된 사실): \(pressureFacts)
+- 후보(소비 중일 뿐 — 원인 아님):
 \(cands.isEmpty ? "  없음" : cands)
-- ⚠️ 이 섹션은 시스템 데몬·타 앱이 유발한 앱 밖 문제다. Claude Code 누수와 절대 섞지 말고, 요약에서 "이건 시스템 문제"로 별개 항목으로 명확히 구분해 안내하라.
+- 규칙(반드시 준수):
+  · 심각도는 위 '백엔드 판정'을 그대로 쓰라. 백엔드가 판정하지 않은 '위험'을 문장으로 지어내지 말라.
+  · 후보는 'X 소비 중'으로만 서술하고 원인으로 단정하지 말라(예: "과부하/폭주" 금지).
+  · 근본원인은 가설 금지 — 오직 위 '확인:' 엣지(부모 pid·상위 자원)로만 언급하고, 엣지가 없으면 원인 언급을 삭제하라.
+  · 이 섹션은 시스템 데몬·타 앱이 유발한 앱 밖 신호다. Claude Code 누수와 절대 섞지 말고 별개 항목으로 구분하라.
 """
         }
 
@@ -269,8 +284,13 @@ final class ProcessAnalyzer: ObservableObject {
 ## 누수 의심 상위 5개
 \(leakTopList.isEmpty ? "없음" : leakTopList)
 
+## 케이징 규칙 (반드시 준수 — facts→judgment 울타리)
+- 제공된 상태·백엔드 판정을 넘어서는 심각도를 만들지 말라. 위에 없는 수치를 지어내지 말라.
+- 근본원인은 가설 금지 — 오직 제공된 '확인:' 엣지(부모 pid·상위 자원)로만 언급하라. 엣지를 못 대면 원인 언급을 삭제하라("X 소비 중"까지만).
+- "위험/critical"은 백엔드가 판정했을 때만 쓰라. 문장으로 위험을 지어내지 말라.
+
 ## 분석 요청
-1. 심각도를 판단하세요 (normal/warning/critical)
+1. 심각도를 판단하세요 (normal/warning/critical). 단, 위 케이징 규칙을 넘지 마세요.
 2. 현재 상황을 2문장 이내로 요약하세요. 트렌드(일시 급증 vs 지속 누적)와 시스템 영향(발열·CPU 부하)을 구체적으로 포함.
    유휴 서브에이전트와 예측 이상이 있으면 언급하세요.
    ⚠️ "시스템 레인" 섹션이 있으면 그건 Claude가 아니라 앱 밖 시스템 문제이므로, Claude 누수 문제와 섞지 말고 별개로 분명히 구분해 안내하세요.
@@ -329,10 +349,13 @@ final class ProcessAnalyzer: ObservableObject {
     private func systemHealthNote() -> String {
         let r = SystemHealthEvaluator.shared.report
         guard r.state != .normal else { return "" }
-        let culprit = r.candidates.first { $0.isChronic } ?? r.candidates.first
-        let who = culprit.map { " (\($0.name) 등)" } ?? ""
+        // 소비(flow) 후보 우선. 원인 단정 없이 "소비 중" + 확인 엣지만.
+        let c = r.candidates.first { $0.isConsuming } ?? r.candidates.first
+        let who = c.map { " (\($0.name) \($0.resource.rawValue) 소비 중)" } ?? ""
+        let edge: String
+        if let cp = c?.causalPointer { edge = " — \(cp)" } else { edge = "" }
         let level = r.state == .critical ? "위험" : "경고"
-        return " ⚠️ 이와 별개로, 시스템 자체가 \(level) 상태입니다 — 이건 Claude가 아니라 앱 밖 시스템 문제(시스템 데몬 폭주·메모리 부족\(who))입니다."
+        return " ⚠️ 이와 별개로, 시스템 자체가 \(level) 압박 상태입니다 — 이건 Claude가 아니라 앱 밖 신호입니다\(who)\(edge)."
     }
 
     // MARK: - AI availability check
@@ -352,10 +375,10 @@ final class ProcessAnalyzer: ObservableObject {
 @available(macOS 26.0, *)
 @Generable
 struct AIProcessAnalysis: Sendable {
-    @Guide(description: "심각도 수준: 'normal', 'warning', 'critical' 중 정확히 하나")
+    @Guide(description: "심각도 수준: 'normal', 'warning', 'critical' 중 정확히 하나. 제공된 상태·백엔드 판정을 넘지 말 것 — 근거 없는 'critical'을 지어내지 말 것.")
     var severity: String
 
-    @Guide(description: "현재 상황을 2문장 이내 한국어로 요약. 프로세스 수·메모리 수치를 반드시 포함.")
+    @Guide(description: "현재 상황을 2문장 이내 한국어로 요약. 제공된 프로세스 수·메모리 수치만 사용(없는 수치 생성 금지). 근본원인은 제공된 '확인:' 엣지로만 언급하고, 엣지가 없으면 원인 언급 금지('X 소비 중'까지만).")
     var summary: String
 
     @Guide(description: "사용자가 즉시 해야 할 행동 1문장 (한국어). 조치가 불필요하면 '현 상태를 유지하세요.'")

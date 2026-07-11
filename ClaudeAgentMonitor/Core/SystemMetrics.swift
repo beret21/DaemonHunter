@@ -24,9 +24,18 @@ struct SystemMetrics: Sendable {
     let memWiredGB:      Double         // wire_count
     let memCompressedGB: Double         // compressor_page_count
     let swapoutsLifetime: UInt64        // 누적 swapouts (page-out via compressor)
+    let swapinsLifetime:  UInt64        // 누적 swapins  (page-in  via compressor)
+
+    // ── swap IO RATE (stock이 아닌 throughput; 스왑 스래싱 판정용) ──────
+    // 직전 표본 대비 swapins/swapouts 카운터 델타를 경과 wall 시간으로 나눈 값.
+    let swapInsPerSec:  Double          // pages/sec
+    let swapOutsPerSec: Double          // pages/sec
 
     /// 스왑 사용률 0.0–1.0 (used / total). 스왑 미구성 시 0.
     var swapUsageRatio: Double { swapTotalGB > 0 ? swapUsedGB / swapTotalGB : 0 }
+
+    /// 스왑 IO 총 처리율 (pages/sec). 크기(ratio)가 아니라 실제 페이징 활동량 → 스래싱 신호.
+    var swapIOPagesPerSec: Double { swapInsPerSec + swapOutsPerSec }
 
     let timestamp: Date
 
@@ -58,6 +67,7 @@ struct SystemMetrics: Sendable {
         thermalState: .nominal, fanSpeedRPM: nil,
         swapUsedGB: 0, swapTotalGB: 0, memFreeGB: 0, memActiveGB: 0,
         memInactiveGB: 0, memWiredGB: 0, memCompressedGB: 0, swapoutsLifetime: 0,
+        swapinsLifetime: 0, swapInsPerSec: 0, swapOutsPerSec: 0,
         timestamp: Date()
     )
 }
@@ -71,6 +81,11 @@ final class SystemMetricsCollector: ObservableObject {
     private let cpuSampler = CPUSampler()
     private var timer: Timer?
     private let logger = Logger(subsystem: "com.beret21.DaemonHunter", category: "SystemMetrics")
+
+    // ── swap IO rate 계산용 이전 표본 (누적 카운터 델타) ─────────────────
+    private var prevSwapins:  UInt64 = 0
+    private var prevSwapouts: UInt64 = 0
+    private var prevSwapTime: Date?
 
     static let shared = SystemMetricsCollector()
     private init() {}
@@ -95,6 +110,18 @@ final class SystemMetricsCollector: ObservableObject {
         let thermal = Self.thermalLevel()
         let fan     = Self.fanSpeedRPM()
 
+        // swap IO rate: 누적 카운터 델타 / 경과 wall 시간. 첫 표본·카운터 리셋 시 0.
+        let now = Date()
+        var swapInRate = 0.0, swapOutRate = 0.0
+        if let prev = prevSwapTime {
+            let dt = now.timeIntervalSince(prev)
+            if dt > 0 {
+                if mem.swapins  >= prevSwapins  { swapInRate  = Double(mem.swapins  - prevSwapins)  / dt }
+                if mem.swapouts >= prevSwapouts { swapOutRate = Double(mem.swapouts - prevSwapouts) / dt }
+            }
+        }
+        prevSwapins = mem.swapins; prevSwapouts = mem.swapouts; prevSwapTime = now
+
         current = SystemMetrics(
             cpuUsagePercent: cpu,
             loadAvg1min:  load.0,
@@ -112,7 +139,10 @@ final class SystemMetricsCollector: ObservableObject {
             memWiredGB:      mem.wired,
             memCompressedGB: mem.compressed,
             swapoutsLifetime: mem.swapouts,
-            timestamp: Date()
+            swapinsLifetime:  mem.swapins,
+            swapInsPerSec:    swapInRate,
+            swapOutsPerSec:   swapOutRate,
+            timestamp: now
         )
     }
 
@@ -129,7 +159,8 @@ final class SystemMetricsCollector: ObservableObject {
     private struct MemBreakdown {
         let used: Double; let total: Double; let pressure: SystemMetrics.MemPressure
         let free: Double; let active: Double; let inactive: Double
-        let wired: Double; let compressed: Double; let swapouts: UInt64
+        let wired: Double; let compressed: Double
+        let swapouts: UInt64; let swapins: UInt64
     }
 
     private static func memoryDetail() -> MemBreakdown {
@@ -148,7 +179,7 @@ final class SystemMetricsCollector: ObservableObject {
         guard result == KERN_SUCCESS else {
             return MemBreakdown(used: 0, total: total, pressure: .normal,
                                 free: 0, active: 0, inactive: 0,
-                                wired: 0, compressed: 0, swapouts: 0)
+                                wired: 0, compressed: 0, swapouts: 0, swapins: 0)
         }
 
         let page     = Double(getpagesize())  // C function; avoids Swift 6 shared-mutable-state error on vm_*_page_size
@@ -167,7 +198,7 @@ final class SystemMetricsCollector: ObservableObject {
             used: used, total: total, pressure: pressure,
             free: free / 1e9, active: active / 1e9, inactive: inactive / 1e9,
             wired: wired / 1e9, compressed: compressed / 1e9,
-            swapouts: stats.swapouts
+            swapouts: stats.swapouts, swapins: stats.swapins
         )
     }
 

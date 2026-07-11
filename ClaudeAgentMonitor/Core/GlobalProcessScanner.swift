@@ -8,6 +8,7 @@ import os
 /// 시스템 전역 프로세스 1개의 관측 스냅샷 (Claude 여부 무관).
 struct GlobalProcess: Identifiable, Sendable, Hashable {
     let pid: Int
+    let ppid: Int                     // 부모 pid (pbsd.pbi_ppid) — 인과 확인 포인터용
     let name: String
     let cpuPercent: Double            // 직전 스냅샷 대비 CPU 사용률(%). 멀티코어 합산이라 100 초과 가능.
     let memMB: Double                 // pti_resident_size
@@ -22,6 +23,7 @@ struct GlobalProcess: Identifiable, Sendable, Hashable {
 /// nonisolated 백그라운드 수집용 원시 값. 델타/지속시간은 MainActor 상태와 합산.
 private struct RawGlobalProc: Sendable {
     let pid: Int
+    let ppid: Int
     let name: String
     let residentBytes: UInt64
     let cpuRawNs: UInt64
@@ -107,6 +109,7 @@ final class GlobalProcessScanner: ObservableObject {
 
             samples.append(GlobalProcess(
                 pid: r.pid,
+                ppid: r.ppid,
                 name: r.name,
                 cpuPercent: cpuPct,
                 memMB: Double(r.residentBytes) / (1024.0 * 1024.0),
@@ -159,6 +162,7 @@ final class GlobalProcessScanner: ObservableObject {
             let name = processName(pid: pid, info: info)
             result.append(RawGlobalProc(
                 pid: Int(pid),
+                ppid: Int(info.pbsd.pbi_ppid),
                 name: name,
                 residentBytes: info.ptinfo.pti_resident_size,
                 cpuRawNs: info.ptinfo.pti_total_user + info.ptinfo.pti_total_system,

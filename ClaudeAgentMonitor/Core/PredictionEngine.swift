@@ -244,7 +244,10 @@ final class PredictionEngine: ObservableObject {
             ? persistentDescription(metric: metric, value: filter.estimate, steps: steps)
             : nil
 
-        let isAnomaly  = zAnomaly || fastGrowth || (absLevel != .none) || isPersistent
+        // 정직성(합의 4): 학습된 정상(칼만 잔차 z-score) 이상탐지는 사용자 대면 심각도/경보
+        // 경로에서 제외한다. z-score는 아래 Prediction에 계속 기록하되(DB·예측 곡선용) 경보를
+        // 유발하지 않는다. 경보는 절대 임계·지속(critical)·프로세스 급증 같은 기계적 신호로만.
+        let isAnomaly  = fastGrowth || (absLevel != .none) || isPersistent
 
         let description = anomalyDescription(
             metric: metric,
