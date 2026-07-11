@@ -17,55 +17,21 @@ Claude Code spawns many sub-agent processes during complex tasks. These agents s
 
 **Daemon Hunter** watches your system in real time, identifies zombie and idle agents, and lets you reclaim that memory in one click.
 
-```
-Menu Bar Icon (traffic-light status)
-┌─────────────────────────────────────────┐
-│  🟢 cpu  ← Normal (green, no count)    │
-│  🟡 cpu  ← Warning (yellow, pulsing)   │
-│  🔴 ⚠    ← Critical (red, fast pulse) │
-└─────────────────────────────────────────┘
-```
+![Menu bar traffic-light icons: green Normal, yellow Warning, red Critical with leak count](img/menubar-states.png)
+
+The menu bar icon is a traffic light: **green** when normal, **yellow** (pulsing) on warning, and **red** (fast pulse, with a leak count) when critical.
 
 ---
 
 ## Screenshots
 
-<!-- Add screenshots: run the app → Cmd+Shift+4 → select popover → save to img/ -->
-
 ### Status Popover
 
-```
-╔═══════════════════════════════════════════╗
-║  🔴 CRITICAL          [AI 분석] [상세] [·]║
-╠═══════════════════════════════════════════╣
-║  AI Analysis  ✦ Apple Intelligence        ║
-║  ──────────────────────────────────────  ║
-║  42 sub-agents running, 8 idle.           ║
-║  Total 9.2 GB memory occupied.            ║
-║  💡 Clean up 8 idle processes.            ║
-╠═══════════════════════════════════════════╣
-║  42       9.2GB    8      📈    2   12    ║
-║  agents  memory  leak   trend  alarm  mem ║
-╠═══════════════════════════════════════════╣
-║  CPU 34%  MEM 71%  🌡 Normal  Fan 2400rpm ║
-╠═══════════════════════════════════════════╣
-║  [🧹 Clean 8 leaked processes]            ║
-╠═══════════════════════════════════════════╣
-║  Daemon Hunter v0.1.3    [Self-Heal 🟢]  ║
-╚═══════════════════════════════════════════╝
-```
+![Daemon Hunter status popover showing a CRITICAL state with AI analysis, stats (42 agents, 9.2GB memory, 8 leaks), system metrics, and a red cleanup button](img/popover-en.png)
 
 ### Process Detail Window
 
-```
-╔══╦═══════╦═════╦════════╦══════╦════════════╦══════════════════╗
-║  ║  PID  ║ Age ║ Memory ║ CPU% ║ Leak/Idle  ║      Name        ║
-╠══╬═══════╬═════╬════════╬══════╬════════════╬══════════════════╣
-║🟢║ 82841 ║  3m ║  231MB ║ 1.2% ║            ║ sonnet-4-5       ║
-║🟡⏸║75632║ 45m ║  228MB ║ 0.0% ║ idle       ║ claude-mem obs.  ║
-║🔴║ 23151 ║120m ║  229MB ║ 0.0% ║ parent-died║ claude-mem obs.  ║
-╚══╩═══════╩═════╩════════╩══════╩════════════╩══════════════════╝
-```
+![Process detail window listing agents with status dots, PID, age, memory, CPU%, and leak/idle reasons — including a healthy sonnet-4-5, an idle claude-mem observer, and red parent-died observers](img/detail-en.png)
 
 ---
 
