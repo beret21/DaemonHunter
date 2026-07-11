@@ -38,6 +38,9 @@ final class PredictionEngine: ObservableObject {
         let isAbsoluteAnomaly:          Bool
         let absoluteAnomalyLevel:       AbsoluteAnomalyLevel
         let absoluteAnomalyDescription: String?
+        // ── 지속적 이상(persistent) — 만성 과부하 보정 ───────────────
+        let isPersistentAnomaly:          Bool
+        let persistentAnomalyDescription: String?
         let updatedAt: Date
     }
 
@@ -100,11 +103,31 @@ final class PredictionEngine: ObservableObject {
         }
     }
 
+    /// 지속적(만성) 이상 설명 — 평이한 한글. metric 키·σ는 노출하지 않는다.
+    private func persistentDescription(metric: String, value: Double, steps: Int) -> String {
+        let minutes = steps * Int(max(1, AppSettings.monitorIntervalSeconds)) / 60
+        let what: String
+        switch metric {
+        case "process_count": what = "프로세스 수 \(Int(value))개"
+        case "memory_gb":     what = String(format: "메모리 %.1fGB", value)
+        case "cpu_percent":   what = String(format: "CPU %.0f%%", value)
+        case "thermal_level": what = "발열 위험"
+        default:              what = metric
+        }
+        return "\(what) 위험 수준 \(minutes)분 지속(만성)"
+    }
+
     private var filters: [String: KalmanFilter] = [:]
 
     // Rolling residual history (circular buffer) per metric.
     private var residuals: [String: [Double]] = [:]
     private var residualIndex: [String: Int] = [:]
+
+    // ── 지속적 이상(persistent) 카운터 ───────────────────────────────
+    // 잔차/z-score와 독립적으로, 특정 metric이 절대 위험선(critical) 이상으로
+    // 연속 유지된 스텝 수. 칼만 기준선이 만성 상태를 정상으로 흡수하는 맹점 보정.
+    private var persistentCounter: [String: Int] = [:]
+    private let persistentStepsNeeded = 20   // 30s 간격 × 20 ≈ 10분 연속
 
     private init() {}
 
@@ -212,7 +235,16 @@ final class PredictionEngine: ObservableObject {
         let absLevel   = absoluteLevel(metric: metric, value: filter.estimate)
         let absDesc    = absoluteAnomalyDesc(metric: metric, value: filter.estimate, level: absLevel)
 
-        let isAnomaly  = zAnomaly || fastGrowth || (absLevel != .none)
+        // 지속적 이상: 절대 위험선(critical) 이상이 연속 유지되면 카운트, 아니면 리셋
+        let overDanger = absLevel == .critical
+        persistentCounter[metric] = overDanger ? (persistentCounter[metric] ?? 0) + 1 : 0
+        let steps          = persistentCounter[metric] ?? 0
+        let isPersistent   = steps >= persistentStepsNeeded
+        let persistentDesc = isPersistent
+            ? persistentDescription(metric: metric, value: filter.estimate, steps: steps)
+            : nil
+
+        let isAnomaly  = zAnomaly || fastGrowth || (absLevel != .none) || isPersistent
 
         let description = anomalyDescription(
             metric: metric,
@@ -238,6 +270,8 @@ final class PredictionEngine: ObservableObject {
             isAbsoluteAnomaly: absLevel != .none,
             absoluteAnomalyLevel: absLevel,
             absoluteAnomalyDescription: absDesc,
+            isPersistentAnomaly: isPersistent,
+            persistentAnomalyDescription: persistentDesc,
             updatedAt: now
         )
     }

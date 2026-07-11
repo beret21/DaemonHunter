@@ -15,6 +15,19 @@ struct SystemMetrics: Sendable {
     let thermalState: ThermalLevel
     let fanSpeedRPM: Int?               // nil if not available
 
+    // ── 절대 관측 지표 (스왑·메모리 압박) ─────────────────────────────
+    let swapUsedGB:      Double         // vm.swapusage xsu_used
+    let swapTotalGB:     Double         // vm.swapusage xsu_total
+    let memFreeGB:       Double         // HOST_VM_INFO64 free_count
+    let memActiveGB:     Double         // active_count
+    let memInactiveGB:   Double         // inactive_count
+    let memWiredGB:      Double         // wire_count
+    let memCompressedGB: Double         // compressor_page_count
+    let swapoutsLifetime: UInt64        // 누적 swapouts (page-out via compressor)
+
+    /// 스왑 사용률 0.0–1.0 (used / total). 스왑 미구성 시 0.
+    var swapUsageRatio: Double { swapTotalGB > 0 ? swapUsedGB / swapTotalGB : 0 }
+
     let timestamp: Date
 
     enum MemPressure: String, Sendable {
@@ -42,7 +55,10 @@ struct SystemMetrics: Sendable {
     static let empty = SystemMetrics(
         cpuUsagePercent: 0, loadAvg1min: 0, loadAvg5min: 0,
         memUsedGB: 0, memTotalGB: 0, memPressure: .normal,
-        thermalState: .nominal, fanSpeedRPM: nil, timestamp: Date()
+        thermalState: .nominal, fanSpeedRPM: nil,
+        swapUsedGB: 0, swapTotalGB: 0, memFreeGB: 0, memActiveGB: 0,
+        memInactiveGB: 0, memWiredGB: 0, memCompressedGB: 0, swapoutsLifetime: 0,
+        timestamp: Date()
     )
 }
 
@@ -74,7 +90,8 @@ final class SystemMetricsCollector: ObservableObject {
     private func sample() {
         let cpu     = cpuSampler.usage()
         let load    = Self.loadAverage()
-        let mem     = Self.memoryStats()
+        let mem     = Self.memoryDetail()
+        let swap    = Self.swapUsage()
         let thermal = Self.thermalLevel()
         let fan     = Self.fanSpeedRPM()
 
@@ -87,6 +104,14 @@ final class SystemMetricsCollector: ObservableObject {
             memPressure:  mem.pressure,
             thermalState: thermal,
             fanSpeedRPM:  fan,
+            swapUsedGB:      swap.used,
+            swapTotalGB:     swap.total,
+            memFreeGB:       mem.free,
+            memActiveGB:     mem.active,
+            memInactiveGB:   mem.inactive,
+            memWiredGB:      mem.wired,
+            memCompressedGB: mem.compressed,
+            swapoutsLifetime: mem.swapouts,
             timestamp: Date()
         )
     }
@@ -99,9 +124,15 @@ final class SystemMetricsCollector: ObservableObject {
         return (avg[0], avg[1])
     }
 
-    // MARK: - Memory
+    // MARK: - Memory (host_statistics64 / HOST_VM_INFO64)
 
-    private static func memoryStats() -> (used: Double, total: Double, pressure: SystemMetrics.MemPressure) {
+    private struct MemBreakdown {
+        let used: Double; let total: Double; let pressure: SystemMetrics.MemPressure
+        let free: Double; let active: Double; let inactive: Double
+        let wired: Double; let compressed: Double; let swapouts: UInt64
+    }
+
+    private static func memoryDetail() -> MemBreakdown {
         var stats = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size
@@ -113,23 +144,43 @@ final class SystemMetricsCollector: ObservableObject {
             }
         }
 
+        let total = Double(ProcessInfo.processInfo.physicalMemory) / 1e9
         guard result == KERN_SUCCESS else {
-            return (0, ProcessInfo.processInfo.physicalMemory.toGB, .normal)
+            return MemBreakdown(used: 0, total: total, pressure: .normal,
+                                free: 0, active: 0, inactive: 0,
+                                wired: 0, compressed: 0, swapouts: 0)
         }
 
-        let page    = Double(getpagesize())  // C function; avoids Swift 6 shared-mutable-state error on vm_*_page_size
-        let active  = Double(stats.active_count)   * page
-        let inactive = Double(stats.inactive_count) * page
-        let wired   = Double(stats.wire_count)      * page
-        let free    = Double(stats.free_count)      * page
-        let used    = (active + inactive + wired) / 1e9
-        let total   = Double(ProcessInfo.processInfo.physicalMemory) / 1e9
+        let page     = Double(getpagesize())  // C function; avoids Swift 6 shared-mutable-state error on vm_*_page_size
+        let active   = Double(stats.active_count)          * page
+        let inactive = Double(stats.inactive_count)        * page
+        let wired    = Double(stats.wire_count)            * page
+        let free     = Double(stats.free_count)            * page
+        let compressed = Double(stats.compressor_page_count) * page
+        let used     = (active + inactive + wired) / 1e9
 
         // 압력 판정: 사용률 기준
         let ratio = used / max(1, total)
         let pressure: SystemMetrics.MemPressure = ratio > 0.90 ? .critical : ratio > 0.75 ? .warning : .normal
 
-        return (used, total, pressure)
+        return MemBreakdown(
+            used: used, total: total, pressure: pressure,
+            free: free / 1e9, active: active / 1e9, inactive: inactive / 1e9,
+            wired: wired / 1e9, compressed: compressed / 1e9,
+            swapouts: stats.swapouts
+        )
+    }
+
+    // MARK: - Swap (sysctlbyname vm.swapusage → xsw_usage)
+
+    private static func swapUsage() -> (used: Double, total: Double) {
+        var usage = xsw_usage()
+        var size  = MemoryLayout<xsw_usage>.stride
+        guard sysctlbyname("vm.swapusage", &usage, &size, nil, 0) == 0 else {
+            return (0, 0)
+        }
+        // xsu_used / xsu_total are bytes
+        return (Double(usage.xsu_used) / 1e9, Double(usage.xsu_total) / 1e9)
     }
 
     // MARK: - Thermal (ProcessInfo)

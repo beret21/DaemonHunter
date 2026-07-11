@@ -35,6 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     cpuPercent:   metrics.cpuUsagePercent,
                     thermalLevel: SelfHealingManager.thermalStateLevel()
                 )
+
+                // 시스템 전역 관측 + 오버헤드 파인더 (기존 폴링 주기 재사용)
+                await GlobalProcessScanner.shared.refresh()
+                SystemHealthEvaluator.shared.evaluate()
             }
         }
 
