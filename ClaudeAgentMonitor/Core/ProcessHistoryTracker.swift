@@ -110,7 +110,9 @@ final class ProcessHistoryTracker: ObservableObject {
         let capturedStatus   = snapshot.status.rawValue
 
         // 매 5번째 스냅샷마다 DB에 저장 (너무 잦은 쓰기 방지)
-        let shouldPersist = history.count % 5 == 0
+        // 단, 이번 세션의 첫 스냅샷은 즉시 저장 — 재시작 직후 팝오버 트렌드 차트가
+        // 몇 분간 이전 세션의 마지막 DB 행에 멈춰 보이는 것을 방지.
+        let shouldPersist = history.count == 1 || history.count % 5 == 0
         if shouldPersist || !newProcs.isEmpty {
             let newRecords = newProcs.map {
                 ProcessEventRecord(pid: $0.pid, ppid: $0.ppid,
@@ -190,12 +192,37 @@ final class ProcessHistoryTracker: ObservableObject {
     private func computeAnalysis(snapshot: ProcessSnapshot) -> TrendAnalysis {
         let counts  = history.map { $0.snapshot.processes.count }
         let leaks   = history.map { $0.snapshot.leakedCount }
-        let interval = AppSettings.monitorIntervalSeconds / 60.0  // 분 단위
+        let interval = AppSettings.monitorIntervalSeconds / 60.0  // 분 단위 (chronic dwell 계산용)
 
-        // ── 기울기 계산 (최근 analysisWindow 개) ──────────────────────
-        let window  = Array(counts.suffix(analysisWindow))
-        let slope   = linearSlope(window)                   // 스냅샷당 기울기
-        let slopePerMin = slope / interval
+        // ── 기울기 계산 (최근 analysisWindow 개, 실제 timestamp 경과시간 기반) ──
+        // 고정 폴링 간격을 가정하지 않고, history에 실제 기록된 timestamp 차이로
+        // 분당 기울기를 낸다. 재시작 직후처럼 세션 내 표본이 몇 개 안 쌓였을 때
+        // 고정 간격 가정으로 튀는 slope를 내는 문제를 방지.
+        let rawWindowEntries = Array(history.suffix(analysisWindow))
+        let windowEntries = trimAfterLastGap(rawWindowEntries, expectedIntervalSeconds: AppSettings.monitorIntervalSeconds)
+        let window = windowEntries.map { $0.snapshot.processes.count }
+
+        let elapsedMinutes: Double = {
+            guard let first = windowEntries.first?.timestamp,
+                  let last  = windowEntries.last?.timestamp else { return 0 }
+            return last.timeIntervalSince(first) / 60.0
+        }()
+        let slopeStep = linearSlope(window)   // 스냅샷 인덱스당 기울기
+        let slopePerMin: Double
+        if windowEntries.count > 1 && elapsedMinutes > 0 {
+            slopePerMin = slopeStep * Double(windowEntries.count - 1) / elapsedMinutes
+        } else {
+            slopePerMin = 0
+        }
+
+        // ── 표본 부족/워밍업 가드 ──────────────────────────────────────
+        // 세션 내 history가 analysisWindow개 미만이거나, 갭 트리밍 후 표본이
+        // 부족하거나, 실제 경과시간이 예상 폴링 간격의 절반에도 못 미치면
+        // 확신 있는 증가/감소 패턴을 내지 않고 관측 중(.stable)으로 둔다.
+        let minElapsedMinutes = (AppSettings.monitorIntervalSeconds / 2.0) / 60.0
+        let hasEnoughSamples = history.count >= analysisWindow
+            && windowEntries.count >= analysisWindow
+            && elapsedMinutes >= minElapsedMinutes
 
         // ── 급증 탐지 ──────────────────────────────────────────────────
         let baseline    = Double(counts.prefix(3).reduce(0, +)) / 3.0
@@ -211,7 +238,9 @@ final class ProcessHistoryTracker: ObservableObject {
 
         // ── 패턴 분류 ──────────────────────────────────────────────────
         let pattern: GrowthPattern
-        if spikeProb > 0.6 {
+        if !hasEnoughSamples {
+            pattern = .stable
+        } else if spikeProb > 0.6 {
             pattern = .spike
         } else if slopePerMin > 0.5 {
             pattern = .fastGrowing
@@ -311,6 +340,29 @@ final class ProcessHistoryTracker: ObservableObject {
             )
         }
         .sorted { $0.count > $1.count }
+    }
+
+    // MARK: - Gap guard
+
+    /// 윈도우 내 연속 항목 사이 실제 timestamp 간격이 예상 폴링 간격의 3배를
+    /// 넘는 지점(백프레셔로 폴링이 늘어졌거나 절전 등으로 세션이 끊긴 경우)이
+    /// 있으면, 그 갭 이전 항목들은 버리고 갭 이후 항목만 남긴다.
+    /// (갭을 가로질러 추세를 내지 않기 위함)
+    private func trimAfterLastGap(
+        _ entries: [(timestamp: Date, snapshot: ProcessSnapshot)],
+        expectedIntervalSeconds: Double
+    ) -> [(timestamp: Date, snapshot: ProcessSnapshot)] {
+        guard entries.count > 1 else { return entries }
+        let gapThreshold = expectedIntervalSeconds * 3
+        var lastGapIndex = -1
+        for i in 1..<entries.count {
+            let delta = entries[i].timestamp.timeIntervalSince(entries[i - 1].timestamp)
+            if delta > gapThreshold {
+                lastGapIndex = i
+            }
+        }
+        guard lastGapIndex >= 0 else { return entries }
+        return Array(entries[lastGapIndex...])
     }
 
     // MARK: - Linear slope (least squares, simplified)

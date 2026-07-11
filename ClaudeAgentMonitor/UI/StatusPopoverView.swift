@@ -254,14 +254,14 @@ struct StatusPopoverView: View {
             .buttonStyle(.plain)
             .help(showTrendChart ? "차트 숨기기" : "트렌드 차트 표시")
             Divider().frame(height: 36).opacity(0.4)
-            // 예측경보 셀
+            // 이상 신호 셀 (관찰된 현재 상태 — 미래 예측 아님)
             statCell(
                 predEngine.activeAnomalies.isEmpty ? "✓" : "\(predEngine.activeAnomalies.count)",
-                "예측경보",
+                "이상 신호",
                 color: predEngine.activeAnomalies.contains { $0.absoluteAnomalyLevel == .critical || ($0.residualZScore.map { abs($0) } ?? 0) > 4 } ? .red
                      : predEngine.activeAnomalies.isEmpty ? .green : .orange
             )
-            .help(predEngine.activeAnomalies.first?.anomalyDescription ?? "예측 이상 없음")
+            .help(predEngine.activeAnomalies.first?.anomalyDescription ?? "관찰된 이상 없음")
             Divider().frame(height: 36).opacity(0.4)
             // claude-mem 관찰자 셀
             let memObsCnt  = snapshot.processes.filter(\.isClaudeMemObserver).count

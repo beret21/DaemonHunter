@@ -195,7 +195,7 @@ final class ProcessAnalyzer: ObservableObject {
 """
         }
 
-        // 칼만 예측 이상 섹션
+        // 관찰된 이상 신호 섹션 (절대임계·지속·급증 등 기계적 신호 — 미래 예측 아님)
         let anomalies = PredictionEngine.shared.activeAnomalies
         var anomalySection = ""
         if !anomalies.isEmpty {
@@ -205,7 +205,7 @@ final class ProcessAnalyzer: ObservableObject {
             }.joined(separator: "\n")
             anomalySection = """
 
-## 칼만 예측 이상 (\(anomalies.count)건)
+## 관찰된 이상 신호 (\(anomalies.count)건)
 \(lines)
 """
         }
@@ -288,11 +288,12 @@ final class ProcessAnalyzer: ObservableObject {
 - 제공된 상태·백엔드 판정을 넘어서는 심각도를 만들지 말라. 위에 없는 수치를 지어내지 말라.
 - 근본원인은 가설 금지 — 오직 제공된 '확인:' 엣지(부모 pid·상위 자원)로만 언급하라. 엣지를 못 대면 원인 언급을 삭제하라("X 소비 중"까지만).
 - "위험/critical"은 백엔드가 판정했을 때만 쓰라. 문장으로 위험을 지어내지 말라.
+- 미래를 예측하거나 전망하지 말라. 오직 지금까지 관찰된 사실과 현재 변화율(추세)만 요약하라. 단, 위에 제공된 "소진 추정" 수치(현재 속도가 유지될 때의 기계적 함의)는 예외로 그대로 인용할 수 있다.
 
 ## 분석 요청
 1. 심각도를 판단하세요 (normal/warning/critical). 단, 위 케이징 규칙을 넘지 마세요.
 2. 현재 상황을 2문장 이내로 요약하세요. 트렌드(일시 급증 vs 지속 누적)와 시스템 영향(발열·CPU 부하)을 구체적으로 포함.
-   유휴 서브에이전트와 예측 이상이 있으면 언급하세요.
+   유휴 서브에이전트와 관찰된 이상 신호가 있으면 언급하세요.
    ⚠️ "시스템 레인" 섹션이 있으면 그건 Claude가 아니라 앱 밖 시스템 문제이므로, Claude 누수 문제와 섞지 말고 별개로 분명히 구분해 안내하세요.
 3. 지금 당장 해야 할 행동을 1문장으로 권고하세요.
 4. 사용자에게 알림이 필요한지 판단하세요. 중복 알림을 최소화하고, 상태 전환·즉각 조치 필요 시만 true.
