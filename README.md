@@ -61,7 +61,7 @@ The menu bar icon is a traffic light: **green** when normal, **yellow** (pulsing
 - Structured output: severity, summary, recommendation, notification decision
 - Auto-refreshes every 60 seconds when popover is open
 
-### Self-Healing
+### Adaptive Load Throttling (Self-Healing)
 - Monitors its own PID resource usage (`proc_pidinfo`)
 - 5-level backpressure: Normal → Cautious → Reduced → Minimal → Suspended
 - Circuit breaker for slow DB writes (> 500 ms)
@@ -193,7 +193,7 @@ One real-world incident: **107 observer agents** accumulated (≈ 12 GB RAM) acr
 - Kalman filter prediction with residual z-score anomaly detection
 - Absolute value anomaly alerting (process count, memory, CPU, thermal)
 - Apple Intelligence on-device analysis with rule-based fallback
-- Self-healing 5-level backpressure
+- Adaptive load throttling: 5-level backpressure
 - Smart notifications with 10-minute cooldown
 - SQLite v5 schema with automatic migration
 - 10-language UI
