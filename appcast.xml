@@ -8,6 +8,18 @@
         <description>Claude Code zombie sub-agent hunter for macOS</description>
         <language>en</language>
         <item>
+            <title>Daemon Hunter 0.1.008</title>
+            <pubDate>Sat, 11 Jul 2026 07:58:48 +0000</pubDate>
+            <enclosure
+                url="https://github.com/beret21/DaemonHunter/releases/download/v0.1.008/DaemonHunter-0.1.008.zip"
+                sparkle:version="8"
+                sparkle:shortVersionString="0.1.008"
+                length="1479364"
+                type="application/octet-stream"
+                sparkle:edSignature="d7aRsRuLZ0JoMUKW/OBYMhvE859vNjaK4lnur36CRYpG+3wmYD6uBB5uPUpkJt8/39683NjzEQl0i83KKLzuDA=="/>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+        </item>
+        <item>
             <title>Daemon Hunter 0.1.007</title>
             <pubDate>Thu, 09 Jul 2026 17:18:57 +0000</pubDate>
             <enclosure
