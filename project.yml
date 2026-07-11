@@ -57,7 +57,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "Apple Development"
         DEVELOPMENT_TEAM: "DT9JQA4X82"
-        SPARKLE_ED_PUBLIC_KEY: "oPaLIKPZ4OaFnAqlkvNAOcurI0WYMR0wf1Y7X4/vQNM="  # Sparkle EdDSA public key (private key in keychain)
+        SPARKLE_ED_PUBLIC_KEY: "cFBwTLEG3a+RMA0SIGpWpITuHaaeg7qPKeZXnOh5R64="  # 이 Mac keychain 개인키에 대응(generate_keys -p). 서명·검증 키 반드시 일치.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: YES
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
