@@ -44,6 +44,7 @@ struct StatusPopoverView: View {
     @ObservedObject  var tracker:    ProcessHistoryTracker = .shared
     @ObservedObject  var metrics:    SystemMetricsCollector = .shared
     @ObservedObject  var predEngine: PredictionEngine = .shared
+    @ObservedObject  var health:     SystemHealthEvaluator = .shared
 
     @Environment(\.openSettings) private var openSettingsAction
     @Environment(\.openWindow)   private var openWindow
@@ -54,6 +55,7 @@ struct StatusPopoverView: View {
     @State private var isCleaningUp   = false
     @State private var cleanupMsg:    String?
     @State private var showTrendChart = false
+    @State private var showSystemDetail = true
     @State private var dbSnapshots:   [SnapshotRecord] = []
     @State private var autoRefreshTimer: Timer?
     private let autoRefreshInterval: TimeInterval = 60
@@ -73,6 +75,8 @@ struct StatusPopoverView: View {
             statsRow
             Divider()
             systemRow
+            Divider()
+            systemHealthSection
             if showTrendChart {
                 Divider()
                 TrendChartView(trend: trend, dbSnapshots: dbSnapshots)
@@ -84,7 +88,7 @@ struct StatusPopoverView: View {
             Divider()
             footerRow
         }
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.regularMaterial)
         .frame(width: 360)
         .onAppear {
             triggerAnalysis(force: false)
@@ -139,9 +143,8 @@ struct StatusPopoverView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(statusColor)
         }
-        .padding(.horizontal, 7).padding(.vertical, 3)
-        .background(statusColor.opacity(0.15))
-        .clipShape(Capsule())
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .glassEffect(.regular.tint(statusColor.opacity(0.22)), in: .capsule)
     }
 
     // MARK: - AI Analysis
@@ -320,6 +323,138 @@ struct StatusPopoverView: View {
             .padding(.trailing, 14)
         }
         .padding(.vertical, 8)
+    }
+
+    // MARK: - System health / overhead
+
+    private var systemHealthSection: some View {
+        let r = health.report
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Text("시스템 건강 / 오버헤드")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if !r.candidates.isEmpty {
+                    Text("\(r.candidates.count)건")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { showSystemDetail.toggle() }
+                    } label: {
+                        Image(systemName: showSystemDetail ? "chevron.up" : "chevron.down")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(showSystemDetail ? "회수 리포트 접기" : "회수 리포트 펼치기")
+                }
+            }
+
+            // 요약 줄 (report.summary는 상태 이모지를 이미 포함)
+            Text(r.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // 스왑 사용률 · 메모리 압박 레벨
+            HStack(spacing: 6) {
+                metricChip("스왑", String(format: "%.0f%%", r.swapRatio * 100), swapColor(r.swapRatio))
+                metricChip("메모리 압박", memPressureText(r.memPressureLevel), memPressureColor(r.memPressureLevel))
+            }
+
+            // 오버헤드 회수 리포트 (리포트 전용 — 프로세스 종료 버튼 없음)
+            if r.candidates.isEmpty {
+                Text("회수 대상 없음 — 시스템 정상")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            } else if showSystemDetail {
+                GlassEffectContainer(spacing: 6) {
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(r.candidates.prefix(6)) { c in
+                                candidateRow(c)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 176)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private func candidateRow(_ c: OverheadCandidate) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(c.name)
+                    .font(.caption.weight(.medium)).lineLimit(1)
+                chronicBadge(c.isChronic)
+                Spacer()
+                Text(candidateValueText(c))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 5) {
+                Text(c.resource.rawValue)
+                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                Text("·").font(.system(size: 9)).foregroundStyle(.quaternary)
+                Text(SystemHealthEvaluator.humanDuration(c.durationSeconds) + " 지속")
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+            Text(c.suggestion)
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: 8))
+    }
+
+    private func chronicBadge(_ isChronic: Bool) -> some View {
+        Text(isChronic ? "만성" : "일시")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(isChronic ? .red : .secondary)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background((isChronic ? Color.red : Color.gray).opacity(0.16))
+            .clipShape(Capsule())
+    }
+
+    private func metricChip(_ label: String, _ value: String, _ color: Color) -> some View {
+        HStack(spacing: 3) {
+            Text(label).font(.system(size: 9)).foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    private func candidateValueText(_ c: OverheadCandidate) -> String {
+        switch c.resource {
+        case .cpu:    return String(format: "%.0f%%", c.value)
+        case .memory: return String(format: "%.1fGB", c.value / 1024)
+        case .swap:   return String(format: "%.1fGB", c.value / 1024)
+        }
+    }
+
+    private func swapColor(_ ratio: Double) -> Color {
+        ratio >= 0.8 ? .red : ratio >= 0.5 ? .orange : .secondary
+    }
+
+    private func memPressureText(_ level: Int) -> String {
+        switch level {
+        case 2:  return "위험"
+        case 1:  return "경고"
+        default: return "정상"
+        }
+    }
+
+    private func memPressureColor(_ level: Int) -> Color {
+        switch level {
+        case 2:  return .red
+        case 1:  return .orange
+        default: return .secondary
+        }
     }
 
     // MARK: - Actions

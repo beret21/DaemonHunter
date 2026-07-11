@@ -325,12 +325,23 @@ final class PredictionEngine: ObservableObject {
         var parts: [String] = []
         if let d = absDesc { parts.append(d) }
         if zAnomaly, let z = zScore {
-            let dir = z > 0 ? "초과" : "미달"
-            parts.append(String(format: "%@ 잔차 %.1fσ %@", metric, abs(z), dir))
+            // 내부 지표 키·잔차/σ 용어를 노출하지 않고 자연어로 표현
+            parts.append("\(metricDisplayName(metric)) 평소보다 \(z > 0 ? "급증" : "급감")")
         }
         if fastGrowth {
-            parts.append(String(format: "프로세스 급증 +%.1f/인터벌", velocity))
+            parts.append("프로세스 빠르게 증가 중")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// 영문 metric 키 → 사용자 표시용 한글 이름.
+    private func metricDisplayName(_ metric: String) -> String {
+        switch metric {
+        case "process_count": return "프로세스 수"
+        case "memory_gb":     return "메모리"
+        case "cpu_percent":   return "CPU"
+        case "thermal_level": return "발열"
+        default:              return metric
+        }
     }
 }

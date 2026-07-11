@@ -17,7 +17,7 @@ struct SettingsView: View {
         TabView {
             generalTab.tabItem    { Label("일반", systemImage: "gear") }
             thresholdsTab.tabItem { Label("임계값", systemImage: "slider.horizontal.3") }
-            selfHealingTab.tabItem{ Label("자가치유", systemImage: "heart.text.square") }
+            selfHealingTab.tabItem{ Label("앱 부하 자동조절", systemImage: "heart.text.square") }
             appearanceTab.tabItem { Label("외관", systemImage: "paintbrush") }
             languageTab.tabItem   { Label("언어", systemImage: "globe") }
             aboutTab.tabItem      { Label("정보", systemImage: "info.circle") }
@@ -350,7 +350,7 @@ private struct SelfHealingSettingsView: View {
                     }
                     .padding(4)
                 } label: {
-                    Label("자가치유 상태", systemImage: "heart.text.square.fill")
+                    Label("앱 부하 자동조절 상태", systemImage: "heart.text.square.fill")
                 }
 
                 // ── 자체 리소스 ───────────────────────────────────
@@ -387,7 +387,7 @@ private struct SelfHealingSettingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         gateRow("AI 분석",         healer.level.allowsAIAnalysis)
                         gateRow("리소스 추적",     healer.level.allowsResourceTracking)
-                        gateRow("칼만 예측",       healer.level.allowsPredictionEngine)
+                        gateRow("추세 예측",       healer.level.allowsPredictionEngine)
                         gateRow("DB 전체 쓰기",    healer.level.allowsFullDBWrites)
                         gateRow("DB 최소 쓰기",    healer.level.allowsDBWrites)
                         HStack(spacing: 6) {
@@ -421,7 +421,7 @@ private struct SelfHealingSettingsView: View {
                     Label("모니터링", systemImage: "timer")
                 }
 
-                Text("자가치유는 자동으로 동작하며 수동 설정이 필요 없습니다.\n시스템이 회복되면 모든 기능이 자동으로 재활성화됩니다.")
+                Text("앱 부하 자동조절은 자동으로 동작하며 수동 설정이 필요 없습니다.\n시스템이 회복되면 모든 기능이 자동으로 재활성화됩니다.")
                     .font(.caption2).foregroundStyle(.tertiary)
                     .padding(.top, 4)
             }

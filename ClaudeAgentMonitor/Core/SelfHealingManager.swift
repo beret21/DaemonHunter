@@ -382,7 +382,7 @@ struct SelfHealingBadge: View {
                 Image(systemName: "heart.text.square.fill")
                     .foregroundStyle(badgeColor)
                     .font(.caption2)
-                Text("\(healer.level.emoji) 자가치유 \(healer.level.description)")
+                Text("\(healer.level.emoji) 앱 부하 자동조절 \(healer.level.description)")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(badgeColor)
                 if !healer.statusMessage.isEmpty {
@@ -393,8 +393,7 @@ struct SelfHealingBadge: View {
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(badgeColor.opacity(0.10))
-            .clipShape(Capsule())
+            .glassEffect(.regular.tint(badgeColor.opacity(0.18)), in: .capsule)
         }
     }
 
