@@ -175,10 +175,9 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private var appVersion: String {
-        let info  = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "0.1"
-        let build = info?["CFBundleVersion"] as? String ?? "001"
-        return "\(short).\(String(format: "%03d", Int(build) ?? 0))"
+        // CFBundleShortVersionString(MARKETING_VERSION)이 이미 전체 버전(예: 0.1.007).
+        // 빌드번호를 다시 붙이면 "0.1.007.007"처럼 중복되므로 그대로 사용한다.
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1"
     }
 
     private func resetDefaults() {
@@ -208,8 +207,8 @@ private struct LanguageSettingsView: View {
     @State private var searchText = ""
 
     private var filteredLanguages: [SupportedLanguage] {
-        if searchText.isEmpty { return SupportedLanguage.allCases }
-        return SupportedLanguage.allCases.filter {
+        if searchText.isEmpty { return SupportedLanguage.officiallySupported }
+        return SupportedLanguage.officiallySupported.filter {
             $0.displayName.localizedCaseInsensitiveContains(searchText)
             || $0.rawValue.localizedCaseInsensitiveContains(searchText)
         }

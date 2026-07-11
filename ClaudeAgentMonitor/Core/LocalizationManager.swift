@@ -58,19 +58,16 @@ enum SupportedLanguage: String, CaseIterable, Identifiable {
 
     var isRTL: Bool { self == .arabic }
 
-    /// 시스템 언어 → SupportedLanguage 매핑
+    /// 현재 공식 지원 언어: 한국어·영어. (다국어 확장이 목표이나 정식 지원 전까지는 두 언어만)
+    /// 시스템 기본 언어가 한국어면 한국어, 그 외(영어 포함 미지원 언어)는 영어로.
     static func detectSystem() -> SupportedLanguage {
-        let codes = Locale.preferredLanguages
-        for code in codes {
-            let base = code.components(separatedBy: "-").first ?? code
-            if let match = SupportedLanguage.allCases.first(where: {
-                $0 != .systemDefault && ($0.rawValue == code || $0.rawValue == base)
-            }) {
-                return match
-            }
-        }
-        return .english  // 매핑 실패 시 영어
+        let base = Locale.preferredLanguages.first?.components(separatedBy: "-").first ?? "en"
+        return base == "ko" ? .korean : .english
     }
+
+    /// 설정 화면에 노출할, 현재 정식 지원하는 선택지(시스템 기본값 + 한국어 + 영어).
+    /// 나머지 언어의 번역 데이터는 향후 정식 지원을 위해 보존만 한다.
+    static var officiallySupported: [SupportedLanguage] { [.systemDefault, .korean, .english] }
 }
 
 // MARK: - String Keys
