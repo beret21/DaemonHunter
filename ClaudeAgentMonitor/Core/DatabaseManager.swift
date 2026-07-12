@@ -361,6 +361,20 @@ final class DatabaseManager: Sendable {
 
     func insertSnapshot(snapshot: ProcessSnapshot, pattern: String, slope: Double,
                         newProcesses: [ProcessEventRecord] = []) {
+        insertSnapshot(totalCount: snapshot.processes.count,
+                       leakedCount: snapshot.leakedCount,
+                       totalMemGB: snapshot.totalMemGB,
+                       status: snapshot.status.rawValue,
+                       pattern: pattern, slope: slope,
+                       newProcesses: newProcesses)
+    }
+
+    /// 값 기반 오버로드 — 신규 경로(ResourceTracker 산출)용.
+    /// process_snapshots 스키마는 그대로 두고 의미만 일반화:
+    /// total_count=추적 앱 수, leaked_count=누수의심 앱 수, total_mem_gb=추적 앱 총 메모리
+    func insertSnapshot(totalCount: Int, leakedCount: Int, totalMemGB: Double,
+                        status: String, pattern: String, slope: Double,
+                        newProcesses: [ProcessEventRecord] = []) {
         withDB { db in
             let json = encodeJSON(newProcesses)
             let sql  = """
@@ -375,10 +389,10 @@ final class DatabaseManager: Sendable {
 
             let T = SQLITE_TRANSIENT
             sqlite3_bind_int64(stmt, 1, Int64(Date().timeIntervalSince1970))
-            sqlite3_bind_int(stmt,   2, Int32(snapshot.processes.count))
-            sqlite3_bind_int(stmt,   3, Int32(snapshot.leakedCount))
-            sqlite3_bind_double(stmt,4, snapshot.totalMemGB)
-            sqlite3_bind_text(stmt,  5, snapshot.status.rawValue, -1, T)
+            sqlite3_bind_int(stmt,   2, Int32(totalCount))
+            sqlite3_bind_int(stmt,   3, Int32(leakedCount))
+            sqlite3_bind_double(stmt,4, totalMemGB)
+            sqlite3_bind_text(stmt,  5, status, -1, T)
             sqlite3_bind_text(stmt,  6, pattern, -1, T)
             sqlite3_bind_double(stmt,7, slope)
             sqlite3_bind_text(stmt,  8, json, -1, T)

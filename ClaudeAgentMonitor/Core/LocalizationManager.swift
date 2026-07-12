@@ -146,14 +146,14 @@ private let translations: [L10nKey: [SupportedLanguage: String]] = [
     .appName: [
         .korean: "데몬 헌터",
         .english: "Daemon Hunter",
-        .japanese: "AIエージェントモニター",
-        .chineseSimp: "AI 代理监控",
-        .chineseTrad: "AI 代理監控",
-        .spanish: "Monitor de Agentes IA",
-        .french: "Moniteur d'Agents IA",
-        .german: "KI-Agenten-Monitor",
-        .portuguese: "Monitor de Agentes IA",
-        .arabic: "مراقب وكلاء الذكاء الاصطناعي",
+        .japanese: "デーモンハンター",
+        .chineseSimp: "守护进程猎手",
+        .chineseTrad: "守護行程獵人",
+        .spanish: "Cazador de Daemons",
+        .french: "Chasseur de Daemons",
+        .german: "Daemon-Jäger",
+        .portuguese: "Caçador de Daemons",
+        .arabic: "صائد العمليات",
     ],
 
     .statusNormal: [
@@ -201,9 +201,9 @@ private let translations: [L10nKey: [SupportedLanguage: String]] = [
     ],
 
     .statAgents: [
-        .korean: "에이전트", .english: "Agents", .japanese: "エージェント",
-        .chineseSimp: "代理", .chineseTrad: "代理", .spanish: "Agentes",
-        .french: "Agents", .german: "Agenten", .portuguese: "Agentes", .arabic: "وكلاء",
+        .korean: "앱", .english: "Apps", .japanese: "アプリ",
+        .chineseSimp: "应用", .chineseTrad: "應用程式", .spanish: "Aplicaciones",
+        .french: "Applications", .german: "Anwendungen", .portuguese: "Aplicativos", .arabic: "التطبيقات",
     ],
     .statMemory: [
         .korean: "메모리", .english: "Memory", .japanese: "メモリ",

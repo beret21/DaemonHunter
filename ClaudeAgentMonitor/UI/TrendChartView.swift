@@ -45,14 +45,14 @@ struct TrendChartView: View {
                     ForEach(chartPoints) { pt in
                         LineMark(
                             x: .value("시간", pt.time),
-                            y: .value("에이전트", pt.total)
+                            y: .value("앱", pt.total)
                         )
                         .foregroundStyle(.blue)
                         .interpolationMethod(.monotone)
 
                         AreaMark(
                             x: .value("시간", pt.time),
-                            y: .value("에이전트", pt.total)
+                            y: .value("앱", pt.total)
                         )
                         .foregroundStyle(.blue.opacity(0.08))
                         .interpolationMethod(.monotone)
@@ -86,7 +86,7 @@ struct TrendChartView: View {
 
                 // 범례
                 HStack(spacing: 10) {
-                    legendDot(.blue, "에이전트")
+                    legendDot(.blue, "앱")
                     legendDashLine(.red, "누수")
                     Spacer()
                     if trend.slopePerMinute != 0 {

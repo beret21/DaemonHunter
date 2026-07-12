@@ -75,21 +75,18 @@ struct ProcessSnapshot: Sendable {
         }
     }
 
+    @MainActor
     init(processes: [AgentProcess] = []) {
         self.timestamp  = Date()
         self.processes  = processes
         self.totalMemGB = processes.reduce(0.0) { $0 + $1.memMB } / 1024.0
         self.leakedCount = processes.filter(\.isLeaked).count
 
-        let total = processes.count
-        if total >= AppSettings.criticalProcessCount
-            || totalMemGB >= AppSettings.criticalMemoryGB
-            || leakedCount > 10 {
-            self.status = .critical
-        } else if total >= AppSettings.warningProcessCount || leakedCount > 3 {
-            self.status = .warning
-        } else {
-            self.status = .normal
+        // 레인 B(SystemHealthEvaluator, 압박 기반) 패스스루 — 구 Claude 프로세스 수 기준 판정 폐기.
+        switch SystemHealthEvaluator.shared.report.state {
+        case .normal:   self.status = .normal
+        case .warning:  self.status = .warning
+        case .critical: self.status = .critical
         }
     }
 
@@ -130,6 +127,14 @@ enum AppSettings {
     }
     static var criticalProcessCount: Int {
         Int(UserDefaults.standard.double(forKey: "critCount").nonZero ?? 50)
+    }
+    // 누수의심 앱 수 임계 — PredictionEngine의 "process_count" metric이 이제 이 값을 받는다
+    // (구 warnCount/critCount는 Claude 프로세스 총수 기준이라 별개 키로 분리, 혼선 방지).
+    static var leakSuspectWarnCount: Int {
+        Int(UserDefaults.standard.double(forKey: "leakSuspectWarnCount").nonZero ?? 2)
+    }
+    static var leakSuspectCritCount: Int {
+        Int(UserDefaults.standard.double(forKey: "leakSuspectCritCount").nonZero ?? 5)
     }
     static var criticalMemoryGB: Double {
         UserDefaults.standard.double(forKey: "critMemGB").nonZero ?? 10

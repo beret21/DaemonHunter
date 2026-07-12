@@ -31,6 +31,8 @@ final class ProcessAnalyzer: ObservableObject {
         let shouldNotify: Bool
         let notificationMessage: String    // 20자 이내
         let isAIGenerated: Bool
+        let suggestedAction: String         // "kill" / "monitor" / "none"
+        let suggestedTargetApp: String      // suggestedAction=="kill"일 때 대상 앱 이름
     }
 
     /// Force = 캐시 무시하고 재분석.
@@ -120,7 +122,9 @@ final class ProcessAnalyzer: ObservableObject {
                 recommendation: output.recommendation,
                 shouldNotify: output.shouldNotify,
                 notificationMessage: output.notificationMessage,
-                isAIGenerated: true
+                isAIGenerated: true,
+                suggestedAction: output.suggestedAction,
+                suggestedTargetApp: output.suggestedTargetApp
             )
         } catch {
             logger.error("FoundationModels error: \(error.localizedDescription)")
@@ -139,13 +143,6 @@ final class ProcessAnalyzer: ObservableObject {
         trend: TrendAnalysis?,
         metrics: SystemMetrics?
     ) -> String {
-        let leaked = snapshot.processes.filter(\.isLeaked)
-        let oldest = snapshot.processes.first
-
-        let leakTopList = leaked.prefix(5).map {
-            "• PID \($0.pid): \($0.ageFormatted) 경과, \(Int($0.memMB))MB, 원인: \($0.leakReason)"
-        }.joined(separator: "\n")
-
         // 상태 전환 섹션
         var deltaSection = ""
         if let d = delta, d.statusChanged {
@@ -240,62 +237,61 @@ final class ProcessAnalyzer: ObservableObject {
   · 심각도는 위 '백엔드 판정'을 그대로 쓰라. 백엔드가 판정하지 않은 '위험'을 문장으로 지어내지 말라.
   · 후보는 'X 소비 중'으로만 서술하고 원인으로 단정하지 말라(예: "과부하/폭주" 금지).
   · 근본원인은 가설 금지 — 오직 위 '확인:' 엣지(부모 pid·상위 자원)로만 언급하고, 엣지가 없으면 원인 언급을 삭제하라.
-  · 이 섹션은 시스템 데몬·타 앱이 유발한 앱 밖 신호다. Claude Code 누수와 절대 섞지 말고 별개 항목으로 구분하라.
+  · 이 섹션은 특정 앱이 아니라 시스템 전체의 압박 신호다. 위 "앱별 리소스 현황"(개별 앱 소비)과 섞지 말고 별개 항목으로 구분하라.
 """
         }
 
-        // 유휴 서브에이전트 섹션
-        let idleProcs = snapshot.processes.filter(\.isIdle)
-        var idleSection = ""
-        if !idleProcs.isEmpty {
-            let lines = idleProcs.prefix(3).map {
-                "• PID \($0.pid): 유휴 \($0.idleSnapshots)회, \(Int($0.memMB))MB 점유"
-            }.joined(separator: "\n")
-            idleSection = """
-
-## CPU 유휴 서브에이전트 (\(idleProcs.count)개)
-\(lines)
+        // 앱별 리소스 현황 (ResourceTracker.shared 직접 참조 — FR1/FR4)
+        let rt = ResourceTracker.shared
+        let appStatusSection = """
+## 앱별 리소스 현황 [\(snapshot.status.rawValue)]
+- 추적 중인 앱: \(rt.topApps.count)개  |  상위 총 메모리: \(String(format: "%.1f", rt.latestReport?.totalMemGB ?? 0))GB
+- 메모리 압박: \(rt.memoryInfo.pressureLevel.rawValue)  |  스왑: \(String(format: "%.1f", rt.memoryInfo.swapUsedGB))GB
+- 누수 의심 앱: \(rt.leakSuspects.count)개
 """
-        }
 
-        // claude-mem 관찰자 섹션
-        let memObservers = snapshot.processes.filter(\.isClaudeMemObserver)
-        var memObserverSection = ""
-        if !memObservers.isEmpty {
-            let leaked = memObservers.filter(\.isLeaked).count
-            let totalMB = Int(memObservers.reduce(0.0) { $0 + $1.memMB })
-            memObserverSection = """
+        // 누수 의심 앱 상위 5 (leak-suspect 여부는 ResourceTracker가 이미 임계 판정 완료)
+        let leakAppList = rt.leakSuspects.prefix(5).map {
+            "• \($0.appName) [\($0.category)] — 연속 증가 임계 초과, 현재 \(Int($0.totalMemMB))MB, PID \($0.pids.count)개"
+        }.joined(separator: "\n")
 
-## claude-mem 메모리 관찰자 (\(memObservers.count)개, \(totalMB)MB)
-- 미종료(누수): \(leaked)개
-- 가장 오래된: \(memObservers.first.map { "\($0.ageFormatted) (PID \($0.pid))" } ?? "없음")
-- bun worker-service 데몬이 생성하는 메모리 저장용 관찰자 에이전트 (정상 종료 후에도 잔존)
+        // 상세 평가(드릴다운) — 부하 임계 초과 앱만 (drilldownApps가 비어있지 않을 때만 등장)
+        var drilldownSection = ""
+        if !rt.drilldownApps.isEmpty {
+            let blocks = rt.drilldownApps.map { app -> String in
+                let details = rt.detailedProcesses(for: app)
+                let orphanCount = details.filter(\.isOrphan).count
+                let idleCount = details.filter(\.isIdle).count
+                return """
+
+## 상세 평가 — \(app) (부하 임계 초과)
+- PID \(details.count)개: 고아 \(orphanCount)개, 유휴 \(idleCount)개
 """
+            }.joined()
+            drilldownSection = blocks
         }
 
         return """
-당신은 macOS 시스템 전문가입니다. Claude Code sub-agent 프로세스 상태와 시스템 헬스를 종합 분석해 한국어로 안내해주세요.
+당신은 macOS 시스템 리소스 분석 전문가입니다. 아래 제공된 확정 관측 사실(추적 중인 앱의 리소스 사용량과 시스템 압박 상태)만 근거로 진단하고, 구체적 처방을 한국어로 제시하세요.
 
-## 현재 프로세스 상태 [\(snapshot.status.rawValue)]
-- 총 프로세스: \(snapshot.processes.count)개  |  총 메모리: \(String(format: "%.1f", snapshot.totalMemGB))GB
-- 누수 의심: \(snapshot.leakedCount)개 (\(String(format: "%.1f", leaked.reduce(0){$0+$1.memMB}/1024))GB)
-- 최장 생존: \(oldest.map { "\($0.ageFormatted) (PID \($0.pid))" } ?? "없음")\(deltaSection)\(trendSection)\(metricsSection)\(systemLaneSection)\(anomalySection)\(idleSection)\(memObserverSection)
+\(appStatusSection)\(deltaSection)\(trendSection)\(metricsSection)\(systemLaneSection)\(anomalySection)
 
-## 누수 의심 상위 5개
-\(leakTopList.isEmpty ? "없음" : leakTopList)
+## 누수 의심 앱 상위 5
+\(leakAppList.isEmpty ? "없음" : leakAppList)\(drilldownSection)
 
 ## 케이징 규칙 (반드시 준수 — facts→judgment 울타리)
 - 제공된 상태·백엔드 판정을 넘어서는 심각도를 만들지 말라. 위에 없는 수치를 지어내지 말라.
 - 근본원인은 가설 금지 — 오직 제공된 '확인:' 엣지(부모 pid·상위 자원)로만 언급하라. 엣지를 못 대면 원인 언급을 삭제하라("X 소비 중"까지만).
 - "위험/critical"은 백엔드가 판정했을 때만 쓰라. 문장으로 위험을 지어내지 말라.
 - 미래를 예측하거나 전망하지 말라. 오직 지금까지 관찰된 사실과 현재 변화율(추세)만 요약하라. 단, 위에 제공된 "소진 추정" 수치(현재 속도가 유지될 때의 기계적 함의)는 예외로 그대로 인용할 수 있다.
+- 종료(kill) 제안은 제공된 사실에 기계적 근거(고아 확인됨, 누수 의심 + 압박 지속 등)가 있을 때만 하라. 근거를 요약에 명시하라.
 
 ## 분석 요청
 1. 심각도를 판단하세요 (normal/warning/critical). 단, 위 케이징 규칙을 넘지 마세요.
 2. 현재 상황을 2문장 이내로 요약하세요. 트렌드(일시 급증 vs 지속 누적)와 시스템 영향(발열·CPU 부하)을 구체적으로 포함.
-   유휴 서브에이전트와 관찰된 이상 신호가 있으면 언급하세요.
-   ⚠️ "시스템 레인" 섹션이 있으면 그건 Claude가 아니라 앱 밖 시스템 문제이므로, Claude 누수 문제와 섞지 말고 별개로 분명히 구분해 안내하세요.
-3. 지금 당장 해야 할 행동을 1문장으로 권고하세요.
+   상세 평가 대상과 관찰된 이상 신호가 있으면 언급하세요.
+   ⚠️ "시스템 레인" 섹션이 있으면 그건 특정 앱이 아니라 시스템 전체 신호이므로, 앱별 리소스 문제와 섞지 말고 별개로 분명히 구분해 안내하세요.
+3. 지금 해야 할 행동을 1문장으로 처방하세요 — 근거가 있으면 대상 앱을 지목하고 종료 권장 여부를 분명히 하세요(모호한 표현 금지).
 4. 사용자에게 알림이 필요한지 판단하세요. 중복 알림을 최소화하고, 상태 전환·즉각 조치 필요 시만 true.
 5. shouldNotify=true 시 20자 이내 알림 메시지를 작성하세요.
 """
@@ -304,48 +300,61 @@ final class ProcessAnalyzer: ObservableObject {
     // MARK: - Rule-based fallback
 
     private func analyzeWithRules(snapshot: ProcessSnapshot, delta: SnapshotDelta?) -> AnalysisResult {
-        let total = snapshot.processes.count
-        let leaked = snapshot.leakedCount
-        let memGB = snapshot.totalMemGB
+        let rt = ResourceTracker.shared
+        let total = rt.topApps.count
+        let suspectCount = rt.leakSuspects.count
+        let memGB = rt.latestReport?.totalMemGB ?? 0
         let statusChanged = delta?.statusChanged ?? false
-        // 시스템 레인(앱 외부) 문제는 Claude 누수와 별개로 덧붙인다.
+        // 시스템 레인(앱 외부) 문제는 특정 앱 문제와 별개로 덧붙인다.
         let sysNote = systemHealthNote()
+        // 고아 프로세스 확인된 앱 탐색 (drilldownApps 대상만 — FR3 온디맨드 판정 결과 소비)
+        let orphanApp = rt.drilldownApps.first { app in
+            rt.detailedProcesses(for: app).contains { $0.isOrphan }
+        }
+        let action    = orphanApp != nil ? "kill" : "none"
+        let targetApp = orphanApp ?? ""
 
         switch snapshot.status {
         case .critical:
             return AnalysisResult(
                 timestamp: Date(),
                 severity: "critical",
-                summary: "서브 에이전트 \(total)개가 실행 중이며 \(leaked)개가 누수 상태입니다. 총 \(String(format: "%.1f", memGB))GB를 점유해 시스템 자원이 심각하게 낭비되고 있습니다.\(sysNote)",
-                recommendation: "누수된 \(leaked)개의 프로세스를 즉시 정리하세요.",
-                shouldNotify: statusChanged || leaked > 10,
-                notificationMessage: "심각: \(leaked)개 누수·\(String(format: "%.1f", memGB))GB",
-                isAIGenerated: false
+                summary: "추적 중인 앱 \(total)개 중 \(suspectCount)개가 누수 의심 상태입니다. 상위 앱 총 \(String(format: "%.1f", memGB))GB를 점유해 시스템 자원이 심각하게 소모되고 있습니다.\(sysNote)",
+                recommendation: orphanApp.map { "\($0)이(가) 고아 프로세스로 확인되어 종료를 권장합니다." } ?? "누수 의심 앱을 즉시 정리하세요.",
+                shouldNotify: statusChanged || suspectCount > 10,
+                notificationMessage: "심각: 누수의심 \(suspectCount)개·\(String(format: "%.1f", memGB))GB",
+                isAIGenerated: false,
+                suggestedAction: action,
+                suggestedTargetApp: targetApp
             )
         case .warning:
             return AnalysisResult(
                 timestamp: Date(),
                 severity: "warning",
-                summary: "서브 에이전트 \(total)개 중 \(leaked)개가 장기 유휴 상태입니다. \(String(format: "%.1f", memGB))GB의 메모리가 사용되고 있습니다.\(sysNote)",
-                recommendation: "\(leaked)개의 유휴 프로세스 정리를 고려하세요.",
+                summary: "추적 중인 앱 \(total)개 중 \(suspectCount)개가 누수 의심 상태입니다. \(String(format: "%.1f", memGB))GB의 메모리가 사용되고 있습니다.\(sysNote)",
+                recommendation: orphanApp.map { "\($0)이(가) 고아 프로세스로 확인되어 종료를 권장합니다." } ?? "누수 의심 앱 정리를 고려하세요.",
                 shouldNotify: statusChanged,
-                notificationMessage: "경고: 유휴 프로세스 \(leaked)개",
-                isAIGenerated: false
+                notificationMessage: "경고: 누수의심 앱 \(suspectCount)개",
+                isAIGenerated: false,
+                suggestedAction: action,
+                suggestedTargetApp: targetApp
             )
         case .normal:
             return AnalysisResult(
                 timestamp: Date(),
                 severity: "normal",
-                summary: "서브 에이전트 \(total)개가 정상 동작 중입니다. 메모리 사용량은 \(String(format: "%.1f", memGB))GB입니다.\(sysNote)",
-                recommendation: sysNote.isEmpty ? "현 상태를 유지하세요." : "Claude 프로세스는 정상입니다. 시스템 과부하는 앱 밖 원인을 확인하세요.",
+                summary: "추적 중인 앱 \(total)개 중 \(suspectCount)개가 누수 의심 상태입니다. 메모리 사용량은 \(String(format: "%.1f", memGB))GB입니다.\(sysNote)",
+                recommendation: sysNote.isEmpty ? "현 상태를 유지하세요." : "특정 앱이 아니라 시스템 과부하는 앱 밖 원인을 확인하세요.",
                 shouldNotify: false,
                 notificationMessage: "",
-                isAIGenerated: false
+                isAIGenerated: false,
+                suggestedAction: action,
+                suggestedTargetApp: targetApp
             )
         }
     }
 
-    /// 시스템 레인(앱 외부)이 경고/위험이면 Claude 누수와 분명히 구분한 안내 문구를 반환.
+    /// 시스템 레인(앱 외부)이 경고/위험이면 특정 앱 문제와 분명히 구분한 안내 문구를 반환.
     /// 정상이면 빈 문자열.
     private func systemHealthNote() -> String {
         let r = SystemHealthEvaluator.shared.report
@@ -356,7 +365,7 @@ final class ProcessAnalyzer: ObservableObject {
         let edge: String
         if let cp = c?.causalPointer { edge = " — \(cp)" } else { edge = "" }
         let level = r.state == .critical ? "위험" : "경고"
-        return " ⚠️ 이와 별개로, 시스템 자체가 \(level) 압박 상태입니다 — 이건 Claude가 아니라 앱 밖 신호입니다\(who)\(edge)."
+        return " ⚠️ 이와 별개로, 시스템 자체가 \(level) 압박 상태입니다 — 이건 특정 앱이 아니라 앱 밖 신호입니다\(who)\(edge)."
     }
 
     // MARK: - AI availability check
@@ -382,7 +391,7 @@ struct AIProcessAnalysis: Sendable {
     @Guide(description: "현재 상황을 2문장 이내 한국어로 요약. 제공된 프로세스 수·메모리 수치만 사용(없는 수치 생성 금지). 근본원인은 제공된 '확인:' 엣지로만 언급하고, 엣지가 없으면 원인 언급 금지('X 소비 중'까지만).")
     var summary: String
 
-    @Guide(description: "사용자가 즉시 해야 할 행동 1문장 (한국어). 조치가 불필요하면 '현 상태를 유지하세요.'")
+    @Guide(description: "즉시 해야 할 행동 1문장. 근거가 있으면 대상 앱을 지목한 구체적 처방(예: 'OO이 메모리를 지속 증가시키고 있어 종료를 권장합니다'). 불필요 시 '현 상태를 유지하세요.'")
     var recommendation: String
 
     @Guide(description: "알림 표시 필요 여부. 상태 전환이나 즉각 조치가 필요할 때만 true. 중복 알림 최소화.")
@@ -390,5 +399,11 @@ struct AIProcessAnalysis: Sendable {
 
     @Guide(description: "shouldNotify=true일 때만 작성. 20자 이내 한국어 알림 메시지. false면 빈 문자열.")
     var notificationMessage: String
+
+    @Guide(description: "권장 조치: 'kill'(특정 앱 종료 권장)/'monitor'(관찰 지속)/'none'. 'kill'은 고아 확인·누수의심+압박 지속 등 제공된 사실에 기계적 근거가 있을 때만.")
+    var suggestedAction: String
+
+    @Guide(description: "suggestedAction='kill'일 때 대상 앱 이름(제공된 현황의 이름 그대로). 그 외 빈 문자열.")
+    var suggestedTargetApp: String
 }
 #endif

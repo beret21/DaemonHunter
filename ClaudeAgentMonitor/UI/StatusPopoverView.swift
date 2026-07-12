@@ -45,6 +45,7 @@ struct StatusPopoverView: View {
     @ObservedObject  var metrics:    SystemMetricsCollector = .shared
     @ObservedObject  var predEngine: PredictionEngine = .shared
     @ObservedObject  var health:     SystemHealthEvaluator = .shared
+    @ObservedObject  var resources:  ResourceTracker = .shared
 
     @Environment(\.openSettings) private var openSettingsAction
     @Environment(\.openWindow)   private var openWindow
@@ -54,6 +55,8 @@ struct StatusPopoverView: View {
 
     @State private var isCleaningUp   = false
     @State private var cleanupMsg:    String?
+    @State private var showKillSuspectsAlert = false
+    @State private var showAISuggestKillAlert = false
     @State private var showTrendChart = false
     @State private var showSystemDetail = true
     @State private var dbSnapshots:   [SnapshotRecord] = []
@@ -63,7 +66,6 @@ struct StatusPopoverView: View {
     var snapshot: ProcessSnapshot { monitor.snapshot }
     var trend:    TrendAnalysis   { tracker.analysis }
 
-    private var mainSessionCount: Int { snapshot.processes.filter { $0.cmdArgs == "메인세션" }.count }
     private var memObserverLeakCount: Int { snapshot.processes.filter { $0.isClaudeMemObserver && $0.isLeaked }.count }
 
     var body: some View {
@@ -81,7 +83,7 @@ struct StatusPopoverView: View {
                 Divider()
                 TrendChartView(trend: trend, dbSnapshots: dbSnapshots)
             }
-            if snapshot.leakedCount > 0 || cleanupMsg != nil {
+            if snapshot.leakedCount > 0 || !resources.leakSuspects.isEmpty || cleanupMsg != nil {
                 Divider()
                 actionsSection
             }
@@ -193,6 +195,23 @@ struct StatusPopoverView: View {
                     }
                 }
 
+                if a.suggestedAction == "kill", !a.suggestedTargetApp.isEmpty {
+                    Button {
+                        showAISuggestKillAlert = true
+                    } label: {
+                        Label("AI 제안: \(a.suggestedTargetApp) 종료", systemImage: "sparkles")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.purple)
+                    .alert("AI 제안: 앱 종료", isPresented: $showAISuggestKillAlert) {
+                        Button("종료", role: .destructive) { killAISuggestedApp(appName: a.suggestedTargetApp) }
+                        Button("취소", role: .cancel) {}
+                    } message: {
+                        Text("\(a.suggestedTargetApp)을(를) 종료하시겠습니까? 저장하지 않은 작업이 유실될 수 있습니다.")
+                    }
+                }
+
                 HStack(spacing: 4) {
                     Image(systemName: a.isAIGenerated ? "sparkles" : "ruler")
                         .font(.caption2).foregroundStyle(.tertiary)
@@ -219,24 +238,21 @@ struct StatusPopoverView: View {
     private var statsRow: some View {
         HStack(spacing: 0) {
             statCell(
-                "\(snapshot.processes.count)",
-                "에이전트",
-                sub: mainSessionCount > 0 ? "+\(mainSessionCount) 세션" : nil,
-                color: snapshot.processes.count >= AppSettings.criticalProcessCount ? .red
-                     : snapshot.processes.count >= AppSettings.warningProcessCount  ? .orange : nil
+                "\(resources.topApps.count)",
+                "추적 앱"
             )
             Divider().frame(height: 36).opacity(0.4)
             statCell(
-                String(format: "%.1f", snapshot.totalMemGB) + "GB",
+                String(format: "%.1f", resources.latestReport?.totalMemGB ?? 0) + "GB",
                 "메모리",
-                color: snapshot.totalMemGB >= AppSettings.criticalMemoryGB ? .red
-                     : snapshot.totalMemGB >= AppSettings.criticalMemoryGB * 0.5 ? .orange : nil
+                color: (resources.latestReport?.totalMemGB ?? 0) >= AppSettings.criticalMemoryGB ? .red
+                     : (resources.latestReport?.totalMemGB ?? 0) >= AppSettings.criticalMemoryGB * 0.5 ? .orange : nil
             )
             Divider().frame(height: 36).opacity(0.4)
             statCell(
-                "\(snapshot.leakedCount)",
-                "누수",
-                color: snapshot.leakedCount > 0 ? .orange : .green
+                "\(resources.leakSuspects.count)",
+                "누수의심",
+                color: resources.leakSuspects.count > 0 ? .orange : .green
             )
             Divider().frame(height: 36).opacity(0.4)
             // 트렌드 탭 → 차트 토글
@@ -262,17 +278,6 @@ struct StatusPopoverView: View {
                      : predEngine.activeAnomalies.isEmpty ? .green : .orange
             )
             .help(predEngine.activeAnomalies.first?.anomalyDescription ?? "관찰된 이상 없음")
-            Divider().frame(height: 36).opacity(0.4)
-            // claude-mem 관찰자 셀
-            let memObsCnt  = snapshot.processes.filter(\.isClaudeMemObserver).count
-            let memObsLeak = snapshot.processes.filter { $0.isClaudeMemObserver && $0.isLeaked }.count
-            statCell(
-                "\(memObsCnt)",
-                "mem관찰",
-                sub: memObsLeak > 0 ? "누수 \(memObsLeak)" : nil,
-                color: memObsLeak > 0 ? .purple : memObsCnt > 0 ? .secondary : nil
-            )
-            .help("claude-mem 메모리 관찰자 프로세스 (\(memObsLeak)개 미종료)")
         }
         .padding(.vertical, 8)
     }
@@ -513,6 +518,24 @@ struct StatusPopoverView: View {
                 .disabled(isCleaningUp)
                 .padding(.horizontal, 14)
             }
+            if !resources.leakSuspects.isEmpty {
+                Button {
+                    showKillSuspectsAlert = true
+                } label: {
+                    Label("누수의심 앱 정리 (\(resources.leakSuspects.count)개)",
+                          systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
+                .padding(.horizontal, 14)
+                .alert("누수의심 앱 정리", isPresented: $showKillSuspectsAlert) {
+                    Button("종료", role: .destructive) { killLeakSuspectApps() }
+                    Button("취소", role: .cancel) {}
+                } message: {
+                    Text("\(resources.leakSuspects.count)개 앱을 종료하시겠습니까? 저장하지 않은 작업이 유실될 수 있습니다.")
+                }
+            }
             if let msg = cleanupMsg {
                 HStack(spacing: 6) {
                     Label(msg, systemImage: "checkmark.circle.fill")
@@ -528,6 +551,25 @@ struct StatusPopoverView: View {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    /// 누수의심 앱(ResourceTracker 기준) 일괄 종료 — 확인 alert를 거친 뒤 호출된다.
+    private func killLeakSuspectApps() {
+        let apps = resources.leakSuspects
+        var totalKilled = 0
+        var totalReclaimedMB = 0.0
+        for app in apps {
+            let outcome = resources.killApp(appName: app.appName)
+            totalKilled      += outcome.killed
+            totalReclaimedMB += outcome.reclaimedMB
+        }
+        cleanupMsg = "\(totalKilled)개 종료 · \(String(format: "%.1f", totalReclaimedMB / 1024.0))GB 회수"
+    }
+
+    /// AI가 제안한 특정 앱 종료 — 확인 alert를 거친 뒤에만 호출된다(FR5: AI 제안도 확인 생략 불가).
+    private func killAISuggestedApp(appName: String) {
+        let outcome = resources.killApp(appName: appName)
+        cleanupMsg = "\(outcome.killed)개 종료 · \(String(format: "%.1f", outcome.reclaimedMB / 1024.0))GB 회수"
     }
 
     private var leakMemText: String {

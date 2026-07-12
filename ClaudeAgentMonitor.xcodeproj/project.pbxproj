@@ -29,18 +29,20 @@
 		9F34F2753DBAE53BFE1E8C97 /* SelfHealingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76BEB1929A8580A956CD861 /* SelfHealingManager.swift */; };
 		A48933C87EDB31CBF6043737 /* StatusPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83B5F16308E6B57497CD10E /* StatusPopoverView.swift */; };
 		A59662BBAB6C4FDD8772B982 /* TrendSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7AA0551E4B7BC793B796F8 /* TrendSummaryView.swift */; };
-		A8D3B4CE196BF2EAD109BFE1 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04812D7711F2F702BDBC7FD7 /* MenuBarController.swift */; };
 		D899D73FA4459E12EECF3EBF /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4402DAB312482FFB6E2F2122 /* UpdateManager.swift */; };
 		E9ADC52A07AA0BC4D0D0A9BD /* ResourceTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9D19279692E0B87E56D5FC /* ResourceTracker.swift */; };
 		F3355CA705BD25EE3ABED3AB /* AgentProcess.swift in Sources */ = {isa = PBXBuildFile; fileRef = A233AAEDC1D42EFA5EC0B579 /* AgentProcess.swift */; };
+		F33B72D5773C960A8F33B8EA /* GlobalProcessScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C20E015125983B4EC1AC92B /* GlobalProcessScanner.swift */; };
+		F4EE9B979F515618907E1365 /* SystemHealthEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32EA010D0A13C291A241A5F0 /* SystemHealthEvaluator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		04812D7711F2F702BDBC7FD7 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		080997E7C0B78A035C9FDC82 /* LocalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationManager.swift; sourceTree = "<group>"; };
 		0D5A981DEBF4FAB82D5CAFA2 /* ProcessDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessDetailView.swift; sourceTree = "<group>"; };
 		1274B6E02E6F8CDC127ABFAD /* ClaudeAgentMonitor-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ClaudeAgentMonitor-Bridging-Header.h"; sourceTree = "<group>"; };
+		1C20E015125983B4EC1AC92B /* GlobalProcessScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalProcessScanner.swift; sourceTree = "<group>"; };
 		20AD2907A20E63F04B85E941 /* ProcessAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessAnalyzer.swift; sourceTree = "<group>"; };
+		32EA010D0A13C291A241A5F0 /* SystemHealthEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemHealthEvaluator.swift; sourceTree = "<group>"; };
 		386CCD7F855D379F90954A25 /* PredictionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionEngine.swift; sourceTree = "<group>"; };
 		4402DAB312482FFB6E2F2122 /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
 		4DCDC3EDDC1881C5C3E8619E /* ClaudeAgentMonitorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAgentMonitorApp.swift; sourceTree = "<group>"; };
@@ -136,7 +138,6 @@
 			isa = PBXGroup;
 			children = (
 				AACD04133E58662AFF8095D7 /* CleanupLogView.swift */,
-				04812D7711F2F702BDBC7FD7 /* MenuBarController.swift */,
 				0D5A981DEBF4FAB82D5CAFA2 /* ProcessDetailView.swift */,
 				7351D1C9A125F3ECCA7296ED /* SettingsView.swift */,
 				D83B5F16308E6B57497CD10E /* StatusPopoverView.swift */,
@@ -152,6 +153,7 @@
 			children = (
 				A233AAEDC1D42EFA5EC0B579 /* AgentProcess.swift */,
 				9E37AC13D19AB9617EE8B4A3 /* DatabaseManager.swift */,
+				1C20E015125983B4EC1AC92B /* GlobalProcessScanner.swift */,
 				D074C135F80D91084A7F99B1 /* KalmanFilter.swift */,
 				080997E7C0B78A035C9FDC82 /* LocalizationManager.swift */,
 				386CCD7F855D379F90954A25 /* PredictionEngine.swift */,
@@ -159,6 +161,7 @@
 				6ADD1AB7ADF2ADC338F6A7AA /* ProcessMonitor.swift */,
 				9E9D19279692E0B87E56D5FC /* ResourceTracker.swift */,
 				D76BEB1929A8580A956CD861 /* SelfHealingManager.swift */,
+				32EA010D0A13C291A241A5F0 /* SystemHealthEvaluator.swift */,
 				5F0FAB9650259B287818ACBD /* SystemMetrics.swift */,
 			);
 			path = Core;
@@ -282,9 +285,9 @@
 				7C8D56BA5A98914D6C1B1E73 /* ClaudeAgentMonitorApp.swift in Sources */,
 				7D4E58C37EDBB9AD1E7EA16E /* CleanupLogView.swift in Sources */,
 				4FA9C8503CD73A88A336E555 /* DatabaseManager.swift in Sources */,
+				F33B72D5773C960A8F33B8EA /* GlobalProcessScanner.swift in Sources */,
 				4D38E0FD276ACE4043CF8DB7 /* KalmanFilter.swift in Sources */,
 				0356BE5BBB127C4CB2647446 /* LocalizationManager.swift in Sources */,
-				A8D3B4CE196BF2EAD109BFE1 /* MenuBarController.swift in Sources */,
 				965EE577F989AEDDAA1B08F8 /* NotificationCoordinator.swift in Sources */,
 				305B22A31781DF1C950D74A6 /* PredictionEngine.swift in Sources */,
 				51F107CBA15D4C71CDE810BD /* ProcessAnalyzer.swift in Sources */,
@@ -295,6 +298,7 @@
 				9F34F2753DBAE53BFE1E8C97 /* SelfHealingManager.swift in Sources */,
 				69CEF2A75FE242D6D284371C /* SettingsView.swift in Sources */,
 				A48933C87EDB31CBF6043737 /* StatusPopoverView.swift in Sources */,
+				F4EE9B979F515618907E1365 /* SystemHealthEvaluator.swift in Sources */,
 				9216C6DBB0B8BF86440206AD /* SystemMetrics.swift in Sources */,
 				676D83E935A88A84DA87B711 /* SystemMetricsView.swift in Sources */,
 				4ECCB58F053069A7ED86635A /* TrendChartView.swift in Sources */,
@@ -394,7 +398,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.beret21.DaemonHunter;
 				PRODUCT_NAME = DaemonHunter;
 				SDKROOT = macosx;
-				SPARKLE_ED_PUBLIC_KEY = "oPaLIKPZ4OaFnAqlkvNAOcurI0WYMR0wf1Y7X4/vQNM=";
+				SPARKLE_ED_PUBLIC_KEY = "cFBwTLEG3a+RMA0SIGpWpITuHaaeg7qPKeZXnOh5R64=";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/ClaudeAgentMonitor/Resources/ClaudeAgentMonitor-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -484,7 +488,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.beret21.DaemonHunter;
 				PRODUCT_NAME = DaemonHunter;
 				SDKROOT = macosx;
-				SPARKLE_ED_PUBLIC_KEY = "oPaLIKPZ4OaFnAqlkvNAOcurI0WYMR0wf1Y7X4/vQNM=";
+				SPARKLE_ED_PUBLIC_KEY = "cFBwTLEG3a+RMA0SIGpWpITuHaaeg7qPKeZXnOh5R64=";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/ClaudeAgentMonitor/Resources/ClaudeAgentMonitor-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";

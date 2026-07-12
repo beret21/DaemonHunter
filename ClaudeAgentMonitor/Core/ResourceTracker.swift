@@ -66,7 +66,33 @@ struct AppResourceSample: Identifiable, Sendable {
     let pids: [Int32]
     let totalMemMB: Double
     let cpuTimeSeconds: Double
+    /// 순간 CPU 사용률(%) — 누적 CPU초 델타 / 경과 wall 시간. 멀티코어 합산이라 100 초과 가능.
+    /// 첫 표본(직전 누적치 없음)은 0.
+    let cpuPercent: Double
     let timestamp: Date
+}
+
+/// 드릴다운 상세 프로세스 (FR3): 임계 초과/누수 의심 앱의 개별 PID 판정 결과.
+struct ProcessDetail: Identifiable, Sendable {
+    let pid: Int32
+    let ppid: Int32
+    let memMB: Double
+    let cpuPercent: Double
+    let isOrphan: Bool      // 부모 사망 입증 — kill(ppid, 0) 실패 (ProcessMonitor parentAlive 로직)
+    let isIdle: Bool        // 누적 CPU ns 델타가 임계 미만으로 연속 N회
+    let ageMinutes: Double
+    var id: Int32 { pid }
+}
+
+/// 한 collect 사이클의 집계 결과 — HistoryTracker/PredictionEngine이 소비 (AppDelegate에서 연결).
+struct ResourceReport: Sendable {
+    let timestamp: Date
+    let apps: [AppResourceSample]       // 추적 대상 전체 (메모리 상위 최대 20)
+    let suspects: [AppResourceSample]   // 누수 의심 (연속 증가)
+    let memory: SystemMemoryInfo
+
+    /// 추적 앱 총 메모리 (GB)
+    var totalMemGB: Double { apps.reduce(0.0) { $0 + $1.totalMemMB } / 1024.0 }
 }
 
 struct SystemMemoryInfo: Sendable {
@@ -103,6 +129,10 @@ final class ResourceTracker: ObservableObject {
     @Published private(set) var topApps:      [AppResourceSample] = []   // top 15 by memory
     @Published private(set) var memoryInfo:   SystemMemoryInfo = .empty
     @Published private(set) var leakSuspects: [AppResourceSample] = []   // apps with growing memory
+    // 드릴다운 대상 앱 (leak-suspect 또는 메모리/CPU 임계 초과) — 매 collect마다 갱신, UI/AI가 소비
+    @Published private(set) var drilldownApps: [String] = []
+    // 한 collect 사이클의 집계 결과 — AppDelegate가 구독해 HistoryTracker/PredictionEngine에 전달
+    @Published private(set) var latestReport: ResourceReport?
 
     private let logger = Logger(subsystem: "com.beret21.DaemonHunter", category: "ResourceTracker")
     private var timer: Timer?
@@ -114,9 +144,27 @@ final class ResourceTracker: ObservableObject {
     // 앱별 최근 샘플 순환 버퍼 (최대 10)
     private var sampleHistory:  [String: [Double]] = [:]
 
+    // ── CPU% 델타 상태 (앱 단위, 누적 카운터 델타 원칙) ─────────────────
+    private var prevCPUSeconds: [String: Double] = [:]   // 앱 이름 → 직전 누적 CPU초
+    private var prevScanTime:   Date?                    // 직전 collect 시각 (경과 wall 시간)
+
+    // ── 드릴다운 PID 상태 (대상 앱의 pid에 대해서만 유지 — NFR: 관측 오버헤드 최소) ──
+    private var prevPidCPURawNs: [Int32: UInt64] = [:]   // pid → 직전 누적 CPU ns
+    private var pidIdleCounters: [Int32: Int]    = [:]   // pid → 연속 유휴 카운터
+    private var latestDetails:   [String: [ProcessDetail]] = [:]  // 앱 이름 → PID 상세
+    // 앱 이름 → 현재 pid 목록 (killApp 조회용, 추적 앱 전체)
+    private var pidsByApp:       [String: [Int32]] = [:]
+
     nonisolated private static let memFloorMB:    Double = 20    // 노이즈 필터
     nonisolated private static let leakThreshold: Int    = 5     // 연속 증가 횟수
-    nonisolated private static let intervalSec:   TimeInterval = 30
+    nonisolated static let intervalSec:   TimeInterval = 30      // 수집 주기 (HistoryTracker 갭 가드에서 참조)
+
+    // ── 드릴다운 임계 (FR3: 부하가 임계를 넘은 앱만 온디맨드 상세평가) ──
+    nonisolated private static let drilldownMemThresholdMB: Double = 2048  // 2GB 이상 점유
+    nonisolated private static let drilldownCPUThresholdPct: Double = 50   // GlobalProcessScanner.highCPUPercent와 동일
+    // 유휴 판정 상수 — ProcessMonitor.enrichWithIdleState와 동일 (10ms 미만 델타 3회 연속)
+    nonisolated private static let idleThresholdNs: UInt64 = 10_000_000
+    nonisolated private static let idleSnapNeeded:  Int    = 3
 
     private init() {}
 
@@ -148,10 +196,16 @@ final class ResourceTracker: ObservableObject {
 
     private func apply(raw: [RawAppGroup], memory: SystemMemoryInfo) {
         let now = Date()
+        let elapsed = prevScanTime.map { now.timeIntervalSince($0) } ?? 0
+        prevScanTime = now
 
         var samples:   [AppResourceSample] = []
         var suspects:  [AppResourceSample] = []
         var seenNames: Set<String> = []
+        var newDetails:   [String: [ProcessDetail]] = [:]
+        var newPidsByApp: [String: [Int32]] = [:]
+        var eligibleApps: [String] = []
+        var trackedPids:  Set<Int32> = []
 
         // 메모리 내림차순 정렬 후 상위 20개만 추적
         let sorted = raw.sorted { $0.totalMemMB > $1.totalMemMB }.prefix(20)
@@ -176,6 +230,17 @@ final class ResourceTracker: ObservableObject {
 
             let isSuspect = (growthCounter[name] ?? 0) >= Self.leakThreshold
 
+            // CPU%: 앱별 누적 CPU초 델타 / 경과 wall 시간 (GlobalProcessScanner의 누적 카운터 델타 방식).
+            // 첫 표본이거나 pid 구성 변화로 누적치가 감소하면 0.
+            let prevCPU = prevCPUSeconds[name]
+            let cpuPercent: Double
+            if let prevCPU, elapsed > 0, group.cpuTimeSeconds >= prevCPU {
+                cpuPercent = (group.cpuTimeSeconds - prevCPU) / elapsed * 100.0
+            } else {
+                cpuPercent = 0
+            }
+            prevCPUSeconds[name] = group.cpuTimeSeconds
+
             let sample = AppResourceSample(
                 id: UUID(),
                 appName: name,
@@ -184,15 +249,26 @@ final class ResourceTracker: ObservableObject {
                 pids: group.pids,
                 totalMemMB: group.totalMemMB,
                 cpuTimeSeconds: group.cpuTimeSeconds,
+                cpuPercent: cpuPercent,
                 timestamp: now
             )
             samples.append(sample)
             if isSuspect { suspects.append(sample) }
+            newPidsByApp[name] = group.pids
+
+            // 드릴다운 대상: leak-suspect 또는 메모리/CPU 임계 초과 앱만 PID별 상세평가 (FR3)
+            if isSuspect
+                || group.totalMemMB > Self.drilldownMemThresholdMB
+                || cpuPercent > Self.drilldownCPUThresholdPct {
+                eligibleApps.append(name)
+                newDetails[name] = buildDetails(group: group, elapsed: elapsed,
+                                                now: now, trackedPids: &trackedPids)
+            }
 
             DatabaseManager.shared.insertResourceSnapshot(
                 appName: name, execPath: group.execPath, category: group.category,
                 pidCount: group.pids.count, totalMemMB: group.totalMemMB,
-                cpuPercent: 0, memDeltaMB: delta, isLeakSuspect: isSuspect
+                cpuPercent: cpuPercent, memDeltaMB: delta, isLeakSuspect: isSuspect
             )
         }
 
@@ -200,12 +276,123 @@ final class ResourceTracker: ObservableObject {
         previousMemory = previousMemory.filter { seenNames.contains($0.key) }
         growthCounter  = growthCounter.filter  { seenNames.contains($0.key) }
         sampleHistory  = sampleHistory.filter  { seenNames.contains($0.key) }
+        prevCPUSeconds = prevCPUSeconds.filter { seenNames.contains($0.key) }
+        // 드릴다운 대상에서 빠진 pid 상태 정리 (대상 앱의 pid만 유지)
+        prevPidCPURawNs = prevPidCPURawNs.filter { trackedPids.contains($0.key) }
+        pidIdleCounters = pidIdleCounters.filter { trackedPids.contains($0.key) }
 
-        self.memoryInfo   = memory
-        self.topApps      = Array(samples.prefix(15))
-        self.leakSuspects = suspects
+        self.memoryInfo    = memory
+        self.topApps       = Array(samples.prefix(15))
+        self.leakSuspects  = suspects
+        self.latestDetails = newDetails
+        self.pidsByApp     = newPidsByApp
+        self.drilldownApps = eligibleApps
+        self.latestReport  = ResourceReport(timestamp: now, apps: samples,
+                                            suspects: suspects, memory: memory)
 
         recordPressureIfNeeded(memory: memory, samples: samples, suspects: suspects)
+    }
+
+    /// 드릴다운 대상 앱 1개의 PID별 고아/유휴 판정 (ProcessMonitor 알고리즘 이식).
+    private func buildDetails(group: RawAppGroup, elapsed: TimeInterval,
+                              now: Date, trackedPids: inout Set<Int32>) -> [ProcessDetail] {
+        var details: [ProcessDetail] = []
+        details.reserveCapacity(group.procs.count)
+
+        for p in group.procs {
+            trackedPids.insert(p.pid)
+
+            // 유휴: pid별 누적 CPU ns 델타 (ProcessMonitor.enrichWithIdleState와 동일 원리)
+            let prevNs  = prevPidCPURawNs[p.pid]
+            let deltaNs: UInt64? = prevNs.flatMap { p.cpuRawNs >= $0 ? p.cpuRawNs - $0 : nil }
+            prevPidCPURawNs[p.pid] = p.cpuRawNs
+
+            let cpuPct: Double
+            if let deltaNs, elapsed > 0 {
+                cpuPct = Double(deltaNs) / (elapsed * 1_000_000_000) * 100.0
+            } else {
+                cpuPct = 0   // 첫 표본 가드
+            }
+
+            // 첫 표본(델타 미상)은 유휴 카운트하지 않음
+            if let deltaNs {
+                if deltaNs < Self.idleThresholdNs { pidIdleCounters[p.pid, default: 0] += 1 }
+                else                              { pidIdleCounters[p.pid] = 0 }
+            }
+            let isIdle = (pidIdleCounters[p.pid] ?? 0) >= Self.idleSnapNeeded
+
+            // 고아: 스캔 시점 ppid의 생존 확인 — kill(ppid, 0) (ProcessMonitor parentAlive 로직)
+            let parentAlive = p.ppid > 1 ? (kill(p.ppid, 0) == 0 || errno == EPERM) : true
+
+            let startDate  = Date(timeIntervalSince1970: Double(p.startTvSec))
+            let ageMinutes = max(0.0, now.timeIntervalSince(startDate) / 60.0)
+
+            details.append(ProcessDetail(
+                pid: p.pid, ppid: p.ppid,
+                memMB: p.memMB, cpuPercent: cpuPct,
+                isOrphan: !parentAlive, isIdle: isIdle,
+                ageMinutes: ageMinutes
+            ))
+        }
+        return details.sorted { $0.memMB > $1.memMB }
+    }
+
+    // MARK: - On-demand drilldown (FR3)
+
+    /// 온디맨드 드릴다운: leak-suspect이거나 메모리/CPU 임계 초과 앱의 PID별 상세 판정.
+    /// `drilldownApps`에 없는 앱은 빈 배열을 반환한다 (상세 상태는 대상 앱에 대해서만 유지).
+    func detailedProcesses(for appName: String) -> [ProcessDetail] {
+        latestDetails[appName] ?? []
+    }
+
+    // MARK: - Kill (FR5 — 실행 함수만 제공, 호출 UI는 2단계)
+
+    struct KillOutcome: Sendable {
+        let killed:      Int
+        let failed:      Int
+        let reclaimedMB: Double
+    }
+
+    /// 추적 중인 앱의 모든 PID에 SIGTERM (ProcessMonitor.killLeaked의 시그널 방식 일반화).
+    @discardableResult
+    func killApp(appName: String) -> KillOutcome {
+        killPIDs(pidsByApp[appName] ?? [])
+    }
+
+    /// 지정 PID들에 SIGTERM. 종료 직전 RSS를 조회해 회수 메모리를 집계한다.
+    @discardableResult
+    func killPIDs(_ pids: [Int32]) -> KillOutcome {
+        var killed = 0
+        var failed = 0
+        var reclaimedMB = 0.0
+        let selfPid = getpid()
+
+        for pid in pids where pid > 1 && pid != selfPid {
+            // 종료 전 RSS 조회 (회수량 집계용)
+            var info = proc_taskallinfo()
+            let infoSize = Int32(MemoryLayout<proc_taskallinfo>.size)
+            let memMB = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &info, infoSize) > 0
+                ? Double(info.ptinfo.pti_resident_size) / (1024.0 * 1024.0)
+                : 0
+
+            if kill(pid, SIGTERM) == 0 {
+                killed += 1
+                reclaimedMB += memMB
+                logger.info("Terminated PID \(pid)")
+            } else {
+                failed += 1
+                logger.error("Failed SIGTERM PID \(pid) errno=\(errno)")
+            }
+        }
+
+        // killLeaked와 동일하게 잠시 후 재수집해 상태 반영
+        if killed > 0 {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(800))
+                self.collect()
+            }
+        }
+        return KillOutcome(killed: killed, failed: failed, reclaimedMB: reclaimedMB)
     }
 
     /// 메모리 압박 상태 + 신규 누수 의심 동시 발생 시에만 기록 (DB 노이즈 방지).
@@ -238,6 +425,15 @@ final class ResourceTracker: ObservableObject {
 
     // MARK: - Background collection (nonisolated)
 
+    /// PID 1개의 원시 관측값 (드릴다운 판정 재료).
+    private struct RawPidInfo: Sendable {
+        let pid: Int32
+        let ppid: Int32
+        let memMB: Double
+        let cpuRawNs: UInt64      // pti_total_user + pti_total_system (누적 ns)
+        let startTvSec: UInt64    // pbsd.pbi_start_tvsec
+    }
+
     /// 앱 단위로 집계된 중간 결과 (Sendable, 액터 경계 통과용).
     private struct RawAppGroup: Sendable {
         let appName: String
@@ -246,6 +442,7 @@ final class ResourceTracker: ObservableObject {
         var pids: [Int32]
         var totalMemMB: Double
         var cpuTimeSeconds: Double
+        var procs: [RawPidInfo]
     }
 
     /// 시스템 전체 프로세스를 스캔해 앱 단위(appDisplayName)로 그룹화.
@@ -278,19 +475,28 @@ final class ResourceTracker: ObservableObject {
             guard proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &info, infoSize) > 0 else { continue }
 
             let memMB = Double(info.ptinfo.pti_resident_size) / (1024.0 * 1024.0)
-            // CPU 누적 시간(초): user + system (나노초 단위)
-            let cpuSec = Double(info.ptinfo.pti_total_user + info.ptinfo.pti_total_system) / 1_000_000_000.0
+            // CPU 누적 시간: user + system (나노초 단위)
+            let cpuRawNs = UInt64(info.ptinfo.pti_total_user) + UInt64(info.ptinfo.pti_total_system)
+            let cpuSec   = Double(cpuRawNs) / 1_000_000_000.0
+
+            let pidInfo = RawPidInfo(
+                pid: pid, ppid: Int32(info.pbsd.pbi_ppid),
+                memMB: memMB, cpuRawNs: cpuRawNs,
+                startTvSec: info.pbsd.pbi_start_tvsec
+            )
 
             let name = execPath.appDisplayName()
             if var g = groups[name] {
                 g.pids.append(pid)
                 g.totalMemMB += memMB
                 g.cpuTimeSeconds += cpuSec
+                g.procs.append(pidInfo)
                 groups[name] = g
             } else {
                 groups[name] = RawAppGroup(
                     appName: name, execPath: execPath, category: execPath.appCategory(),
-                    pids: [pid], totalMemMB: memMB, cpuTimeSeconds: cpuSec
+                    pids: [pid], totalMemMB: memMB, cpuTimeSeconds: cpuSec,
+                    procs: [pidInfo]
                 )
             }
         }

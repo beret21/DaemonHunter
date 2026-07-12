@@ -3,8 +3,9 @@ import SwiftUI
 @main
 struct DaemonHunterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var monitor  = ProcessMonitor.shared
-    @StateObject private var analyzer = ProcessAnalyzer.shared
+    @StateObject private var monitor   = ProcessMonitor.shared
+    @StateObject private var analyzer  = ProcessAnalyzer.shared
+    @StateObject private var resources = ResourceTracker.shared
 
     var body: some Scene {
         // MARK: - Menu Bar
@@ -15,7 +16,7 @@ struct DaemonHunterApp: App {
         } label: {
             MenuBarIconView(
                 status: monitor.snapshot.status,
-                count:  monitor.snapshot.processes.count
+                count:  resources.leakSuspects.count
             )
         }
         .menuBarExtraStyle(.window)

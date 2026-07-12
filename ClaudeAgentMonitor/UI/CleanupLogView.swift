@@ -75,7 +75,7 @@ struct CleanupLogView: View {
                 emptyState(
                     icon: "waveform",
                     title: "증가 이벤트 없음",
-                    hint: "모니터링 중 새 Claude 프로세스가 감지되면 여기에 기록됩니다."
+                    hint: "모니터링 중 새 프로세스가 감지되면 여기에 기록됩니다."
                 )
             } else {
                 List(spawnEvents) { ev in

@@ -2,7 +2,7 @@
 
 [한국어](README.ko.md)
 
-> A macOS menu bar app that hunts zombie and idle Claude Code sub-agent processes — before they eat your RAM.
+> A macOS menu bar app that watches system processes and resource health, diagnoses the apps causing trouble, and lets you act on it.
 
 ![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-black?logo=apple)
 ![Architecture](https://img.shields.io/badge/arch-Apple%20Silicon-blue)
@@ -13,78 +13,75 @@
 
 ## What It Does
 
-Claude Code spawns many sub-agent processes during complex tasks. These agents should exit when their work is done — but often they don't. They linger in memory, consuming hundreds of MB each and silently heating up your Mac.
+Daemon Hunter sits in your menu bar and continuously watches every app running on your Mac — not just one specific tool. It groups all processes by app, classifies them into categories (AI agent, cloud sync, browser, dev tool, system, other), and tracks who's consuming memory and CPU.
 
-**Daemon Hunter** watches your system in real time, identifies zombie and idle agents, and lets you reclaim that memory in one click.
+When memory keeps growing in one app, or the whole system is under pressure (memory pressure, swap thrashing, CPU load over capacity), Daemon Hunter surfaces it. Apple Intelligence reviews the observed facts and writes a concrete diagnosis and prescription — and when there's actual evidence (a confirmed orphaned process, a leak suspect under sustained pressure), it names the app and suggests terminating it. You always confirm before anything is closed.
 
 ![Menu bar traffic-light icons: green Normal, yellow Warning, red Critical with leak count](img/menubar-states.png)
 
-The menu bar icon is a traffic light: **green** when normal, **yellow** (pulsing) on warning, and **red** (fast pulse, with a leak count) when critical.
+The menu bar icon is a traffic light: **green** when normal, **yellow** (pulsing) on warning, and **red** (fast pulse, with a leak-suspect count badge) when critical.
 
 ---
 
 ## Screenshots
 
+*(Screenshots below are from an earlier version and will be refreshed to reflect the current app-tracking UI.)*
+
 ### Status Popover
 
-![Daemon Hunter status popover showing a CRITICAL state with AI analysis, stats (42 agents, 9.2GB memory, 8 leaks), system metrics, and a red cleanup button](img/popover-en.png)
+![Daemon Hunter status popover showing a CRITICAL state with AI analysis, stats, system metrics, and a red cleanup button](img/popover-en.png)
 
 ### Process Detail Window
 
-![Process detail window listing agents with status dots, PID, age, memory, CPU%, and leak/idle reasons — including a healthy sonnet-4-5, an idle claude-mem observer, and red parent-died observers](img/detail-en.png)
+![Process detail window listing processes with status dots, PID, age, memory, CPU%, and leak/idle reasons](img/detail-en.png)
 
 ---
 
 ## Features
 
-### Real-Time Process Monitoring
-- Tracks all Claude Code main sessions and sub-agents via `proc_listpids` + `proc_pidpath`
-- Detects sub-agents by `--output-format stream-json` flag
-- Detects **claude-mem observers** by `--disallowedTools` flag (spawned by `bun worker-service`)
-- 30-second polling interval (adaptive under system pressure)
+### Global Resource Tracking
+- Aggregates every process on the system by app (bundle/executable name)
+- Auto-classifies each app into a category: `ai_agent` / `cloud_sync` / `browser` / `dev_tool` / `system` / `other`
+- Tracks top memory and CPU consumers continuously, no per-tool filtering
+- Flags **leak-suspect** apps from a sustained memory-growth pattern (consecutive increases)
 
-### Idle / Zombie Detection
-- Measures per-process CPU delta (`pti_total_user + pti_total_system`) every snapshot
-- Sub-agent with < 10 ms CPU increase for 3+ consecutive polls → **idle** (≈ 90 seconds)
-- Idle agents shown in orange; leaked agents shown in red
+### System Pressure Evaluation
+- Judges overall system health as **Normal / Warning / Critical** from CPU load vs. core count, kernel memory-pressure level, and swap I/O rate (thrashing signal, not just swap size)
+- Asymmetric hysteresis: escalates instantly, but only de-escalates after several consecutive clean readings — so the status doesn't flicker
 
-### Kalman Filter Prediction
-- 2-state Kalman filter per metric: process count, memory, CPU%, thermal level
-- Residual z-score anomaly detection (> 3σ triggers alarm)
-- **Absolute value anomaly**: even well-predicted values alert if they exceed thresholds
-- Forecast 5-min and 10-min ahead with 1σ/2σ confidence bounds
-- All predictions stored in SQLite for historical analysis
+### On-Demand Detailed Evaluation
+- Apps that cross a load threshold get a per-PID drill-down: **orphan** processes (parent confirmed dead) and **idle** processes (no CPU activity)
+- Drill-down only runs for apps that need it, keeping routine observation cheap
 
-### Apple Intelligence Analysis
-- Uses `FoundationModels` (`@Generable`) for on-device LLM analysis
-- Falls back to rule-based analysis in < 100 ms when AI is unavailable
-- Structured output: severity, summary, recommendation, notification decision
-- Auto-refreshes every 60 seconds when popover is open
+### Apple Intelligence Diagnosis & Prescription
+- On-device LLM analysis via `FoundationModels` (`@Generable`), with an immediate rule-based fallback when AI is unavailable or slow
+- Diagnosis is grounded only in observed facts (tracked apps, leak suspects, system pressure) — no fabricated numbers or predictions
+- Suggests terminating a specific app only when there's mechanical evidence (confirmed orphan, leak suspect under sustained pressure, etc.) — never a vague "consider cleaning up"
 
-### Adaptive Load Throttling (Self-Healing)
-- Monitors its own PID resource usage (`proc_pidinfo`)
-- 5-level backpressure: Normal → Cautious → Reduced → Minimal → Suspended
-- Circuit breaker for slow DB writes (> 500 ms)
-- Adaptive polling: doubles interval under pressure, recovers with hysteresis
+### Take Action
+- Every tracked app has a Terminate button
+- When the AI suggests a kill, the popover shows an "AI suggestion: quit *App*" button
+- Both paths always go through a confirmation alert — the AI can suggest, but never executes on its own
+
+### Trend Analysis
+- Time-based slope (real timestamps, gap-aware after restarts) classifies trends as stable / slow-growing / fast-growing / spike / shrinking
+- Historical sparkline per app/category
 
 ### Smart Notifications
-- System notifications with actionable buttons (Confirm / Clean Up / Open)
-- Time-sensitive interruption level for critical alerts
-- 10-minute cooldown prevents duplicate notifications
+- Notifications fire only on state transitions or when action is warranted, with a 10-minute cooldown to avoid duplicates
+- Actionable buttons (Confirm / Clean Up / Open)
 
-### Trend Chart
-- Historical sparkline overlaid with Kalman prediction line
-- Fast-growing / slow-growing / stable / declining pattern detection
-- Chronic leaker tracking (PID-level queue dwell time)
+### Self-Load Throttling
+- Measures its own memory/CPU usage and applies 5-level backpressure: Normal → Cautious → Reduced → Minimal → Suspended
+- Backs off polling frequency and AI/DB work under its own load, so the watchdog doesn't become part of the problem
 
-### SQLite Database (v5 schema)
-- Process events: leak_detected, idle_detected, cleanup_done
-- Kalman prediction history: metric, predicted, actual, residual
-- Automatic migration with `PRAGMA user_version`
+### SQLite History (v5 schema)
+- Resource snapshots, system-pressure events, app health log, and prediction history are recorded to SQLite
+- Automatic migration via `PRAGMA user_version`
 
 ### Multilingual UI
-- 10 languages: Korean, English, Japanese, Simplified Chinese, Traditional Chinese,
-  Spanish, French, German, Portuguese, Arabic
+- Officially supported: Korean and English (follows system language; anything else falls back to English)
+- Japanese, Simplified/Traditional Chinese, Spanish, French, German, Portuguese, and Arabic translation data exists in the codebase, reserved for future official support
 
 ---
 
@@ -125,53 +122,42 @@ open ClaudeAgentMonitor.xcodeproj
 DaemonHunter/
 ├── App/
 │   ├── ClaudeAgentMonitorApp.swift   # @main, MenuBarExtra, Window scenes
-│   └── AppDelegate.swift             # Lifecycle, ProcessMonitor → PredictionEngine
+│   └── AppDelegate.swift             # Lifecycle wiring: ResourceTracker, SystemHealthEvaluator, PredictionEngine
 ├── Core/
-│   ├── AgentProcess.swift            # Data model + ProcessSnapshot + AppSettings
-│   ├── ProcessMonitor.swift          # libproc scanning, idle enrichment
+│   ├── ResourceTracker.swift         # Global per-app tracking, categorization, leak-suspect detection, drill-down, kill
+│   ├── SystemHealthEvaluator.swift   # System-wide pressure judgment (load/memory/swap), hysteresis
+│   ├── GlobalProcessScanner.swift    # All-PID scan feeding SystemHealthEvaluator
+│   ├── SelfHealingManager.swift      # Self-load backpressure (5 levels)
 │   ├── ProcessHistoryTracker.swift   # Snapshot recording, trend analysis
-│   ├── PredictionEngine.swift        # Kalman filter, anomaly detection
-│   ├── DatabaseManager.swift         # SQLite3 + migration (v1–v5)
-│   ├── SelfHealingManager.swift      # Backpressure, circuit breaker
-│   ├── ResourceTracker.swift         # Own-PID memory/CPU monitoring
+│   ├── PredictionEngine.swift / KalmanFilter.swift  # Kalman-filtered trend/anomaly signals
+│   ├── DatabaseManager.swift         # SQLite3 + migration (v5)
 │   ├── SystemMetrics.swift           # CPU%, load avg, thermal, fan
-│   └── LocalizationManager.swift     # 10-language string table
+│   └── LocalizationManager.swift     # String table (KO/EN official, 8 more reserved)
 ├── Intelligence/
-│   ├── ProcessAnalyzer.swift         # Apple Intelligence + rule-based fallback
-│   └── NotificationCoordinator.swift # UNUserNotificationCenter, categories
+│   ├── ProcessAnalyzer.swift         # Apple Intelligence + rule-based fallback, kill suggestion
+│   └── NotificationCoordinator.swift # UNUserNotificationCenter, cooldown
 └── UI/
-    ├── StatusPopoverView.swift        # Main popover (360 px wide)
-    ├── ProcessDetailView.swift        # Sortable/filterable process table
-    ├── SettingsView.swift             # 6-tab settings panel
-    ├── TrendChartView.swift           # Canvas-based sparkline + Kalman overlay
+    ├── StatusPopoverView.swift        # Main popover
+    ├── ProcessDetailView.swift        # App-level table, per-row terminate + drill-down
+    ├── SettingsView.swift             # Settings panel
+    ├── TrendChartView.swift / TrendSummaryView.swift  # Sparkline + trend summary
     └── CleanupLogView.swift           # Process event history log
 ```
 
----
-
-## How Zombie Detection Works
-
-Claude Code uses [`claude-mem`](https://github.com/thedotmack/claude-mem) as an MCP plugin for persistent memory. It runs:
-
-```
-bun worker-service.cjs --daemon          ← persistent daemon (PPID=1/launchd)
-  ├── node mcp-server.cjs               ← per-session stdio MCP server
-  ├── claude --output-format stream-json \
-  │         --disallowedTools Bash,...  ← memory observer agent (one per session)
-  └── python chroma-mcp                 ← ChromaDB vector store
-```
-
-The **memory observer agents** (`--disallowedTools`) are supposed to save memory and exit. They often don't. Daemon Hunter detects them via:
-
-1. **Identification**: path ends with `/claude` + args contain `--disallowedTools`
-2. **Leak condition**: age > `leakAgeMinutes` (default 30 min, vs 90 min for regular sub-agents)
-3. **Idle condition**: CPU delta < 10 ms for 3 consecutive 30-second polls
-
-One real-world incident: **107 observer agents** accumulated (≈ 12 GB RAM) across two work sessions before cleanup.
+> Note: `ProcessMonitor.swift` / `AgentProcess.swift` (the original Claude Code sub-agent–only scanner) are still present in the codebase and are being phased out as the general-purpose pipeline above takes over.
 
 ---
 
 ## Changelog
+
+### 0.2.0 — 2026-07-12
+
+- **Transition**: Moved from "Claude Code sub-agent–only monitoring" to a general-purpose system process/resource health tool
+- **New**: `ResourceTracker`'s global per-app tracking (category classification, leak-suspect detection) promoted to the primary pipeline
+- **New**: `SystemHealthEvaluator`'s pressure-based (load/memory pressure/swap I/O) system health judgment
+- **New**: On-demand detailed evaluation (orphan/idle drill-down) for apps that cross a load threshold
+- **New**: Apple Intelligence diagnosis gained evidence-based kill suggestion fields; per-app and AI-suggested terminate buttons (confirmation always required)
+- **Cleanup**: Removed the Claude-only framing from the app description and features; rewritten around the general-purpose monitor
 
 ### v0.1.3 — 2026-06-22
 

@@ -74,8 +74,8 @@ final class PredictionEngine: ObservableObject {
     private var absoluteThresholds: [String: AbsoluteThreshold] {
         [
             "process_count": AbsoluteThreshold(
-                warning:  Double(AppSettings.warningProcessCount),
-                critical: Double(AppSettings.criticalProcessCount)
+                warning:  Double(AppSettings.leakSuspectWarnCount),
+                critical: Double(AppSettings.leakSuspectCritCount)
             ),
             "memory_gb":     AbsoluteThreshold(warning: AppSettings.criticalMemoryGB * 0.5,
                                                critical: AppSettings.criticalMemoryGB),
@@ -95,7 +95,7 @@ final class PredictionEngine: ObservableObject {
         guard level != .none else { return nil }
         let label = level == .critical ? "위험" : "경고"
         switch metric {
-        case "process_count": return "프로세스 수 \(Int(value))개 [\(label)]"
+        case "process_count": return "누수의심 앱 \(Int(value))개 [\(label)]"
         case "memory_gb":     return String(format: "메모리 %.1fGB [%@]", value, label)
         case "cpu_percent":   return String(format: "CPU %.0f%% [%@]", value, label)
         case "thermal_level": return "발열 \(value >= 3 ? "위험" : "경고") [\(label)]"
@@ -108,7 +108,7 @@ final class PredictionEngine: ObservableObject {
         let minutes = steps * Int(max(1, AppSettings.monitorIntervalSeconds)) / 60
         let what: String
         switch metric {
-        case "process_count": what = "프로세스 수 \(Int(value))개"
+        case "process_count": what = "누수의심 앱 \(Int(value))개"
         case "memory_gb":     what = String(format: "메모리 %.1fGB", value)
         case "cpu_percent":   what = String(format: "CPU %.0f%%", value)
         case "thermal_level": what = "발열 위험"
@@ -332,7 +332,7 @@ final class PredictionEngine: ObservableObject {
             parts.append("\(metricDisplayName(metric)) 평소보다 \(z > 0 ? "급증" : "급감")")
         }
         if fastGrowth {
-            parts.append("프로세스 빠르게 증가 중")
+            parts.append("누수의심 앱이 빠르게 증가 중")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -340,7 +340,7 @@ final class PredictionEngine: ObservableObject {
     /// 영문 metric 키 → 사용자 표시용 한글 이름.
     private func metricDisplayName(_ metric: String) -> String {
         switch metric {
-        case "process_count": return "프로세스 수"
+        case "process_count": return "누수의심 앱 수"
         case "memory_gb":     return "메모리"
         case "cpu_percent":   return "CPU"
         case "thermal_level": return "발열"
